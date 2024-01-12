@@ -5,6 +5,13 @@ import librosa
 from functools import lru_cache
 import time
 
+import os
+import csv
+import argparse
+import logging
+from tqdm import tqdm
+
+logger = None
 
 
 @lru_cache
@@ -26,7 +33,7 @@ class ASRBase:
     sep = " "   # join transcribe words with this character (" " for whisper_timestamped,
                 # "" for faster-whisper because it emits the spaces when neeeded)
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr):
         self.logfile = logfile
 
         self.transcribe_kargs = {}
@@ -52,12 +59,12 @@ class WhisperTimestampedASR(ASRBase):
 
     sep = " "
 
-    def load_model(self, modelsize=None, cache_dir=None, model_dir=None):
+    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda"):
         import whisper
         from whisper_timestamped import transcribe_timestamped
         self.transcribe_timestamped = transcribe_timestamped
         if model_dir is not None:
-            print("ignoring model_dir, not implemented",file=self.logfile)
+            logger.info("ignoring model_dir, not implemented")
         return whisper.load_model(modelsize, download_root=cache_dir)
 
     def transcribe(self, audio, init_prompt=""):
@@ -94,27 +101,28 @@ class FasterWhisperASR(ASRBase):
 
     sep = ""
 
-    def load_model(self, modelsize=None, cache_dir=None, model_dir=None):
+    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda"):
         from faster_whisper import WhisperModel
         if model_dir is not None:
-            print(f"Loading whisper model from model_dir {model_dir}. modelsize and cache_dir parameters are not used.",file=self.logfile)
+            logger.info(f"Loading whisper model from model_dir {model_dir}. modelsize and cache_dir parameters are not used.")
             model_size_or_path = model_dir
         elif modelsize is not None:
             model_size_or_path = modelsize
         else:
             raise ValueError("modelsize or model_dir parameter must be set")
 
-
-        # this worked fast and reliably on NVIDIA L40
-        model = WhisperModel(model_size_or_path, device="cuda", compute_type="float16", download_root=cache_dir)
+        if device == "cuda":
+            # this worked fast and reliably on NVIDIA L40
+            model = WhisperModel(model_size_or_path, device="cuda", compute_type="float16", download_root=cache_dir)
 
         # or run on GPU with INT8
         # tested: the transcripts were different, probably worse than with FP16, and it was slightly (appx 20%) slower
-        #model = WhisperModel(model_size, device="cuda", compute_type="int8_float16")
-
+        #model = WhisperModel(model_size_or_path, device="cuda", compute_type="int8_float16")
+        
         # or run on CPU with INT8
         # tested: works, but slow, appx 10-times than cuda FP16
-#        model = WhisperModel(modelsize, device="cpu", compute_type="int8") #, download_root="faster-disk-cache-dir/")
+        else:
+            model = WhisperModel(model_size_or_path, device="cpu", compute_type="int8") #, download_root="faster-disk-cache-dir/")
         return model
 
     def transcribe(self, audio, init_prompt=""):
@@ -173,9 +181,9 @@ class HypothesisBuffer:
                         c = " ".join([self.commited_in_buffer[-j][2] for j in range(1,i+1)][::-1])
                         tail = " ".join(self.new[j-1][2] for j in range(1,i+1))
                         if c == tail:
-                            print("removing last",i,"words:",file=self.logfile)
+                            logger.info(f"removing last {i} words:")
                             for j in range(i):
-                                print("\t",self.new.pop(0),file=self.logfile)
+                                logger.info(f"\\t{self.new.pop(0)}")
                             break
 
     def flush(self):
@@ -267,9 +275,9 @@ class OnlineASRProcessor:
         """
 
         prompt, non_prompt = self.prompt()
-        print("PROMPT:", prompt, file=self.logfile)
-        print("CONTEXT:", non_prompt, file=self.logfile)
-        print(f"transcribing {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f} seconds from {self.buffer_time_offset:2.2f}",file=self.logfile)
+        logger.info(f"PROMPT:{prompt}")
+        logger.info(f"CONTEXT:{non_prompt}")
+        logger.info(f"transcribing {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f} seconds from {self.buffer_time_offset:2.2f}")
         res = self.asr.transcribe(self.audio_buffer, init_prompt=prompt)
 
         # transform to [(beg,end,"word1"), ...]
@@ -278,8 +286,8 @@ class OnlineASRProcessor:
         self.transcript_buffer.insert(tsw, self.buffer_time_offset)
         o = self.transcript_buffer.flush()
         self.commited.extend(o)
-        print(">>>>COMPLETE NOW:",self.to_flush(o),file=self.logfile,flush=True)
-        print("INCOMPLETE:",self.to_flush(self.transcript_buffer.complete()),file=self.logfile,flush=True)
+        logger.info(f">>>>COMPLETE NOW:{self.to_flush(o)}")
+        logger.info(f"INCOMPLETE:{self.to_flush(self.transcript_buffer.complete())}")
 
         # there is a newly confirmed text
 
@@ -303,18 +311,18 @@ class OnlineASRProcessor:
             #while k>0 and self.commited[k][1] > l:
             #    k -= 1
             #t = self.commited[k][1] 
-            print(f"chunking segment",file=self.logfile)
+            logger.info(f"chunking segment")
             #self.chunk_at(t)
 
-        print(f"len of buffer now: {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f}",file=self.logfile)
+        logger.info(f"len of buffer now: {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f}")
         return self.to_flush(o)
 
     def chunk_completed_sentence(self):
         if self.commited == []: return
-        print(self.commited,file=self.logfile)
+        logger.info(self.commited)
         sents = self.words_to_sentences(self.commited)
         for s in sents:
-            print("\t\tSENT:",s,file=self.logfile)
+            logger.info("\t\tSENT:",s)
         if len(sents) < 2:
             return
         while len(sents) > 2:
@@ -322,7 +330,7 @@ class OnlineASRProcessor:
         # we will continue with audio processing at this timestamp
         chunk_at = sents[-2][1]
 
-        print(f"--- sentence chunked at {chunk_at:2.2f}",file=self.logfile)
+        logger.info(f"--- sentence chunked at {chunk_at:2.2f}")
         self.chunk_at(chunk_at)
 
     def chunk_completed_segment(self, res):
@@ -339,12 +347,12 @@ class OnlineASRProcessor:
                 ends.pop(-1)
                 e = ends[-2]+self.buffer_time_offset
             if e <= t:
-                print(f"--- segment chunked at {e:2.2f}",file=self.logfile)
+                logger.info(f"--- segment chunked at {e:2.2f}")
                 self.chunk_at(e)
             else:
-                print(f"--- last segment not within commited area",file=self.logfile)
+                logger.info(f"--- last segment not within commited area")
         else:
-            print(f"--- not enough segments to chunk",file=self.logfile)
+            logger.info(f"--- not enough segments to chunk")
 
 
 
@@ -391,7 +399,7 @@ class OnlineASRProcessor:
         """
         o = self.transcript_buffer.complete()
         f = self.to_flush(o)
-        print("last, noncommited:",f,file=self.logfile)
+        logger.info(f"last, noncommited:{f}")
         return f
 
 
@@ -431,7 +439,7 @@ def create_tokenizer(lan):
 
     # the following languages are in Whisper, but not in wtpsplit:
     if lan in "as ba bo br bs fo haw hr ht jw lb ln lo mi nn oc sa sd sn so su sw tk tl tt".split():
-        print(f"{lan} code is not supported by wtpsplit. Going to use None lang_code option.", file=sys.stderr)
+        logger.warning(f"{lan} code is not supported by wtpsplit. Going to use None lang_code option.", file=sys.stderr)
         lan = None
 
     from wtpsplit import WtP
@@ -458,45 +466,107 @@ def add_shared_args(parser):
     parser.add_argument('--buffer_trimming', type=str, default="segment", choices=["sentence", "segment"],help='Buffer trimming strategy -- trim completed sentences marked with punctuation mark and detected by sentence segmenter, or the completed segments returned by Whisper. Sentence segmenter must be installed for "sentence" option.')
     parser.add_argument('--buffer_trimming_sec', type=float, default=15, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')
 
-## main:
+def export_latencies(args, latencies):
 
+    os.makedirs(args.latency_path,exist_ok=True)
+
+    with open(os.path.join(args.latency_path,"latencies.csv"),"w") as f:
+        wr = csv.writer(f)
+        wr.writerow(latencies)
+    
+    with open(os.path.join(args.latency_path,"latencies.txt"),"w") as f:
+        f.write(f"Latency statistics\n")
+        f.write(f"Number of chunks: {len(latencies)}\n")
+        f.write(f"Total time: {np.sum(latencies):.2f}\n")
+        f.write(f"Mean latency: {np.mean(latencies):.2f}\n")
+        f.write(f"Max latency: {np.max(latencies):.2f}\n")
+        f.write(f"Min latency: {np.min(latencies):.2f}\n")
+        f.write(f"Std latency: {np.std(latencies):.2f}\n")
+        f.write(f"Median latency: {np.median(latencies):.2f}\n")
+    
+
+def export_params(args):
+    with open(os.path.join(args.latency_path,"params.txt"),"w") as f:
+        f.write(f"Parameters\n")
+        f.write(f"Audio path: {args.audio_path}\n")
+        f.write(f"Model: {args.model}\n")
+        f.write(f"Language: {args.lan}\n")
+        f.write(f"Backend: {args.backend}\n")
+        f.write(f"VAD: {args.vad}\n")
+        f.write(f"Buffer trimming: {args.buffer_trimming}\n")
+        f.write(f"Buffer trimming sec: {args.buffer_trimming_sec}\n")
+        f.write(f"Min chunk size: {args.min_chunk_size}\n")
+        f.write(f"Offline: {args.offline}\n")
+        f.write(f"Comp unaware: {args.comp_unaware}\n")
+        f.write(f"Device: {args.device}\n")
+        f.write(f"Latency path: {args.latency_path}\n")
+
+def output_transcript(o, now=None):
+    # output format in stdout is like:
+    # 4186.3606 0 1720 Takhle to je
+    # - the first three words are:
+    #    - emission time from beginning of processing, in milliseconds
+    #    - beg and end timestamp of the text segment, as estimated by Whisper model. The timestamps are not accurate, but they're useful anyway
+    # - the next words: segment transcript
+    if now is None:
+        now = time.time()-start
+    if o[0] is not None:
+        logger.info("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]))
+        print("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]), flush=True)
+        logger.info("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]))
+        print("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]), flush=True)
+    else:
+        logger.info(o)
+        print(o, flush=True)
+
+## main:
 if __name__ == "__main__":
 
-    import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('audio_path', type=str, help="Filename of 16kHz mono channel wav, on which live streaming is simulated.")
     add_shared_args(parser)
     parser.add_argument('--start_at', type=float, default=0.0, help='Start processing audio at this time.')
     parser.add_argument('--offline', action="store_true", default=False, help='Offline mode.')
     parser.add_argument('--comp_unaware', action="store_true", default=False, help='Computationally unaware simulation.')
+    parser.add_argument('--device', type=str, default="cuda", choices=["cuda", "cpu"],help='Device used.')
+    parser.add_argument('--latency_path', type=str, default="latency", help='Where to store the latencies.')
+    parser.add_argument('--verbose', default=1, help='Verbose mode.')
     
     args = parser.parse_args()
 
     # reset to store stderr to different file stream, e.g. open(os.devnull,"w")
-    logfile = sys.stderr
+    # logfile = sys.stderr
+
+    if args.verbose==2:
+        logging.basicConfig(filename="log.txt", filemode="w", level=logging.DEBUG)
+    elif args.verbose==1:
+        logging.basicConfig(filename="log.txt", filemode="w", level=logging.INFO)
+    else:
+        logging.basicConfig(filename="log.txt", filemode="w", level=logging.ERROR)  
+    logger= logging.getLogger(__name__)
 
     if args.offline and args.comp_unaware:
-        print("No or one option from --offline and --comp_unaware are available, not both. Exiting.",file=logfile)
+        logger.error("No or one option from --offline and --comp_unaware are available, not both. Exiting.")
         sys.exit(1)
 
     audio_path = args.audio_path
 
     SAMPLING_RATE = 16000
     duration = len(load_audio(audio_path))/SAMPLING_RATE
-    print("Audio duration is: %2.2f seconds" % duration, file=logfile)
+    logger.info("Audio duration is: %2.2f seconds" % duration)
 
     size = args.model
     language = args.lan
 
     t = time.time()
-    print(f"Loading Whisper {size} model for {language}...",file=logfile,end=" ",flush=True)
+    logger.info(f"Loading Whisper {size} model for {language}...")
 
     if args.backend == "faster-whisper":
         asr_cls = FasterWhisperASR
     else:
         asr_cls = WhisperTimestampedASR
 
-    asr = asr_cls(modelsize=size, lan=language, cache_dir=args.model_cache_dir, model_dir=args.model_dir)
+    asr = asr_cls(modelsize=size, lan=language, cache_dir=args.model_cache_dir, model_dir=args.model_dir, device=args.device)
 
     if args.task == "translate":
         asr.set_translate_task()
@@ -506,10 +576,10 @@ if __name__ == "__main__":
 
 
     e = time.time()
-    print(f"done. It took {round(e-t,2)} seconds.",file=logfile)
+    logger.info(f"Loading finished. It took {round(e-t,2)} seconds.")
 
     if args.vad:
-        print("setting VAD filter",file=logfile)
+        logger.info("setting VAD filter")
         asr.use_vad()
 
     
@@ -518,7 +588,7 @@ if __name__ == "__main__":
         tokenizer = create_tokenizer(tgt_language)
     else:
         tokenizer = None
-    online = OnlineASRProcessor(asr,tokenizer,logfile=logfile,buffer_trimming=(args.buffer_trimming, args.buffer_trimming_sec))
+    online = OnlineASRProcessor(asr,tokenizer,logfile=logger,buffer_trimming=(args.buffer_trimming, args.buffer_trimming_sec))
 
 
     # load the audio into the LRU cache before we start the timer
@@ -530,20 +600,7 @@ if __name__ == "__main__":
     beg = args.start_at
     start = time.time()-beg
 
-    def output_transcript(o, now=None):
-        # output format in stdout is like:
-        # 4186.3606 0 1720 Takhle to je
-        # - the first three words are:
-        #    - emission time from beginning of processing, in milliseconds
-        #    - beg and end timestamp of the text segment, as estimated by Whisper model. The timestamps are not accurate, but they're useful anyway
-        # - the next words: segment transcript
-        if now is None:
-            now = time.time()-start
-        if o[0] is not None:
-            print("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]),file=logfile,flush=True)
-            print("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]),flush=True)
-        else:
-            print(o,file=logfile,flush=True)
+    latencies = []
 
     if args.offline: ## offline mode processing (for testing/debugging)
         a = load_audio(audio_path)
@@ -551,61 +608,75 @@ if __name__ == "__main__":
         try:
             o = online.process_iter()
         except AssertionError:
-            print("assertion error",file=logfile)
+            logger.info("assertion error")
             pass
         else:
             output_transcript(o)
         now = None
     elif args.comp_unaware:  # computational unaware mode 
         end = beg + min_chunk
-        while True:
-            a = load_audio_chunk(audio_path,beg,end)
-            online.insert_audio_chunk(a)
-            try:
-                o = online.process_iter()
-            except AssertionError:
-                print("assertion error",file=logfile)
-                pass
-            else:
-                output_transcript(o, now=end)
+        latencies.clear()
+        with tqdm(total=duration) as pbar:
+            while True:
+                a = load_audio_chunk(audio_path,beg,end)
+                online.insert_audio_chunk(a)
+                try:
+                    o = online.process_iter()
+                except AssertionError:
+                    logger.info("assertion error")
+                    pass
+                else:
+                    output_transcript(o, now=end)
 
-            print(f"## last processed {end:.2f}s",file=logfile,flush=True)
+                logger.info(f"## last processed {end:.2f}s")
 
-            if end >= duration:
-                break
-            
-            beg = end
-            
-            if end + min_chunk > duration:
-                end = duration
-            else:
-                end += min_chunk
-        now = duration
-
+                if end >= duration:
+                    break
+                
+                beg = end
+                
+                if end + min_chunk > duration:
+                    end = duration
+                else:
+                    end += min_chunk
+            now = duration
+    
     else: # online = simultaneous mode
         end = 0
-        while True:
-            now = time.time() - start
-            if now < end+min_chunk:
-                time.sleep(min_chunk+end-now)
-            end = time.time() - start
-            a = load_audio_chunk(audio_path,beg,end)
-            beg = end
-            online.insert_audio_chunk(a)
+        latencies.clear()
+        with tqdm(total=duration) as pbar:
+            while True:
+                now = time.time() - start
+                if now < end+min_chunk:
+                    time.sleep(min_chunk+end-now)
+                end = time.time() - start
+                a = load_audio_chunk(audio_path,beg,end)
+                beg = end
+                online.insert_audio_chunk(a)
 
-            try:
-                o = online.process_iter()
-            except AssertionError:
-                print("assertion error",file=logfile)
-                pass
-            else:
-                output_transcript(o)
-            now = time.time() - start
-            print(f"## last processed {end:.2f} s, now is {now:.2f}, the latency is {now-end:.2f}",file=logfile,flush=True)
-
-            if end >= duration:
-                break
-        now = None
+                try:
+                    o = online.process_iter()
+                except AssertionError:
+                    logger.info("assertion error")
+                    pass
+                else:
+                    output_transcript(o)
+                now = time.time() - start
+                latencies.append(now-end)
+                logger.info(f"## last processed {end:.2f} s, now is {now:.2f}, the latency is {now-end:.2f}")
+                pbar.n = round(end,3)
+                pbar.refresh()
+                if end >= duration:
+                    break
+                
+            now = None
 
     o = online.finish()
     output_transcript(o, now=now)
+
+    export_latencies(args, latencies)
+    export_params(args)
+
+
+
+
