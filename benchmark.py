@@ -219,6 +219,7 @@ if __name__ == "__main__":
                     try:
                         o = online.process_iter()
                         end_time = time.time()
+
                     except AssertionError:
                         logger.info("assertion error")
                         pass

@@ -1,7 +1,7 @@
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=1
 min_chunk_size=${2:-2}
-data=${3:-../data/apollo11.mp3}
+data=${3:-../data}
 size=${4:-small}
 language=${5:-en}
 FILE=$data
