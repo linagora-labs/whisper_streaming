@@ -1,4 +1,5 @@
 from whisper_online import * 
+
 import argparse
 import os
 import csv
@@ -14,7 +15,7 @@ def export_processing_times(args, processing_timess):
     os.makedirs(args.latency_path,exist_ok=True)
 
     with open(os.path.join(args.latency_path,"processing_times.json"), 'w') as fp:
-        json.dump(processing_times, fp) 
+        json.dump(processing_times, fp, indent=4) 
 
     
     with open(os.path.join(args.latency_path,"processing_times.txt"),"w") as f:
@@ -71,7 +72,9 @@ if __name__ == "__main__":
     parser.add_argument('--offline', action="store_true", default=False, help='Offline mode.')
     parser.add_argument('--comp_unaware', action="store_true", default=False, help='Computationally unaware simulation.')
     parser.add_argument('--device', type=str, default="cuda", choices=["cuda", "cpu"],help='Device used.')
+    parser.add_argument('--compute_type', type=str, default="int8", choices=["int8", "fp16", "fp32", "int8_float16"], help='Computation type (int8, fp16...).')
     parser.add_argument('--latency_path', type=str, default="latency", help='Where to store the processing_times.')
+    parser.add_argument('--method', type=str, default="beam_search", choices=["beam_search", "greedy"],help='Greedy or beam search decoding.')
     parser.add_argument('--verbose', default=1, help='Verbose mode.')
     args = parser.parse_args()
 
@@ -101,7 +104,12 @@ if __name__ == "__main__":
     else:
         asr_cls = WhisperTimestampedASR
 
-    asr = asr_cls(modelsize=size, lan=language, cache_dir=args.model_cache_dir, model_dir=args.model_dir, device=args.device)
+    asr = asr_cls(modelsize=size, lan=language, cache_dir=args.model_cache_dir, model_dir=args.model_dir, device=args.device, compute_type=args.compute_type)
+
+    if args.method != "greedy":
+        asr.transcribe_kargs['beam_size'] = 5
+        asr.transcribe_kargs['best_of'] = 5
+        asr.transcribe_kargs["temperature"] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
 
     if args.task == "translate":
         asr.set_translate_task()
@@ -154,7 +162,7 @@ if __name__ == "__main__":
         beg = args.start_at
         start = time.time()-beg
 
-        processing_times[audio_path] = {'segments_duration' : [], 'segments_processing_times': []}
+        processing_times[audio_path] = {'segments_duration' : [], 'segments_timestamps': [], 'segments_processing_times': []}
         if args.offline: ## offline mode processing (for testing/debugging)
             start_time = time.time()
             a = load_audio(audio_path)
@@ -168,6 +176,7 @@ if __name__ == "__main__":
             else:
                 output_transcript(o, start)
             processing_times[audio_path]['segments_duration'].append(duration)
+            processing_times[audio_path]['segments_timestamps'].append((0,duration))
             processing_times[audio_path]['segments_processing_times'].append(end_time-start_time)
             logger.info(f"Finished processing {audio_path} in {end_time-start_time:.2f}s")
             now = None
@@ -188,6 +197,7 @@ if __name__ == "__main__":
                         output_transcript(o, start, now=end)
                     logger.debug(f"## last processed {end:.2f}s")
                     processing_times[audio_path]['segments_duration'].append(end-beg)
+                    processing_times[audio_path]['segments_timestamps'].append((beg,end))
                     processing_times[audio_path]['segments_processing_times'].append(end_time-start_time)
                     if end >= duration:
                         pbar.n = round(duration,3)
@@ -228,6 +238,7 @@ if __name__ == "__main__":
                     
                     now = time.time() - start
                     processing_times[audio_path]['segments_duration'].append(end-beg)
+                    processing_times[audio_path]['segments_timestamps'].append((beg,end))
                     processing_times[audio_path]['segments_processing_times'].append(end_time-start_time)
                     processing_times[audio_path]['latencies'].append(now-end)
                     logger.debug(f"## last processed {end:.2f} s, now is {now:.2f}, the latency is {now-end:.2f}")

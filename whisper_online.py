@@ -28,13 +28,13 @@ class ASRBase:
     sep = " "   # join transcribe words with this character (" " for whisper_timestamped,
                 # "" for faster-whisper because it emits the spaces when neeeded)
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None):
         self.logfile = logfile
 
         self.transcribe_kargs = {}
         self.original_language = lan 
 
-        self.model = self.load_model(modelsize, cache_dir, model_dir)
+        self.model = self.load_model(modelsize, cache_dir, model_dir, device=device, compute_type=compute_type)
 
 
     def load_model(self, modelsize, cache_dir):
@@ -54,19 +54,29 @@ class WhisperTimestampedASR(ASRBase):
 
     sep = " "
 
-    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda"):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None):
+        super().__init__(lan, modelsize, cache_dir, model_dir, device, logfile, compute_type)
+        self.transcribe_kargs["verbose"] = None
+        self.transcribe_kargs["beam_size"] = None
+        self.transcribe_kargs["best_of"] = None
+        self.transcribe_kargs["temperature"] = 0
+        self.transcribe_kargs["condition_on_previous_text"] = False
+
+
+    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda", compute_type=None):
         import whisper
         from whisper_timestamped import transcribe_timestamped
         self.transcribe_timestamped = transcribe_timestamped
         if model_dir is not None:
             logger.info("ignoring model_dir, not implemented")
-        return whisper.load_model(modelsize, download_root=cache_dir)
+        if compute_type is not None:
+            logger.info("ignoring compute_type, not implemented")
+        return whisper.load_model(modelsize, download_root=cache_dir, device=device)
 
     def transcribe(self, audio, init_prompt=""):
         result = self.transcribe_timestamped(self.model,
                 audio, language=self.original_language,
-                initial_prompt=init_prompt, verbose=None, beam_size=5, best_of=5, temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
-                condition_on_previous_text=True, **self.transcribe_kargs)
+                initial_prompt=init_prompt, **self.transcribe_kargs)
         return result
  
     def ts_words(self,r):
@@ -96,7 +106,16 @@ class FasterWhisperASR(ASRBase):
 
     sep = ""
 
-    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda"):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type="int8"):
+
+        super().__init__(lan, modelsize, cache_dir, model_dir, device, logfile, compute_type)
+        self.transcribe_kargs['beam_size'] = 1
+        self.transcribe_kargs['best_of'] = 1
+        self.transcribe_kargs['temperature'] = 0
+        self.transcribe_kargs['condition_on_previous_text'] = False
+
+
+    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda", compute_type="int8"):
         from faster_whisper import WhisperModel
         if model_dir is not None:
             logger.info(f"Loading whisper model from model_dir {model_dir}. modelsize and cache_dir parameters are not used.")
@@ -106,23 +125,27 @@ class FasterWhisperASR(ASRBase):
         else:
             raise ValueError("modelsize or model_dir parameter must be set")
 
-        if device == "cuda":
-            # this worked fast and reliably on NVIDIA L40
-            model = WhisperModel(model_size_or_path, device="cuda", compute_type="int8", download_root=cache_dir)
+        if device=="cpu" and self.model_kwargs['compute_type']=="float16":
+            self.compute_type = "int8"
+        model = WhisperModel(model_size_or_path, device=device, compute_type=compute_type, download_root=cache_dir)
 
-        # or run on GPU with INT8
-        # tested: the transcripts were different, probably worse than with FP16, and it was slightly (appx 20%) slower
-        #model = WhisperModel(model_size_or_path, device="cuda", compute_type="int8_float16")
+        # if device == "cuda":
+        #     # this worked fast and reliably on NVIDIA L40
+        #     model = WhisperModel(model_size_or_path, device="cuda", compute_type=compute_type, download_root=cache_dir)
+
+        # # or run on GPU with INT8
+        # # tested: the transcripts were different, probably worse than with FP16, and it was slightly (appx 20%) slower
+        # #model = WhisperModel(model_size_or_path, device="cuda", compute_type="int8_float16")
         
-        # or run on CPU with INT8
-        # tested: works, but slow, appx 10-times than cuda FP16
-        else:
-            model = WhisperModel(model_size_or_path, device="cpu", compute_type="int8") #, download_root="faster-disk-cache-dir/")
+        # # or run on CPU with INT8
+        # # tested: works, but slow, appx 10-times than cuda FP16
+        # else:
+        #     model = WhisperModel(model_size_or_path, device="cpu", compute_type=compute_type) #, download_root="faster-disk-cache-dir/")
         return model
 
     def transcribe(self, audio, init_prompt=""):
         # tested: beam_size=5 is faster and better than 1 (on one 200 second document from En ESIC, min chunk 0.01)
-        segments, info = self.model.transcribe(audio, language=self.original_language, initial_prompt=init_prompt, beam_size=5, word_timestamps=True, condition_on_previous_text=True, **self.transcribe_kargs)
+        segments, info = self.model.transcribe(audio, language=self.original_language, initial_prompt=init_prompt, word_timestamps=True, **self.transcribe_kargs)
         return list(segments)
 
     def ts_words(self, segments):
