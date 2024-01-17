@@ -14,11 +14,11 @@ def export_processing_times(args, processing_timess):
 
     os.makedirs(args.latency_path,exist_ok=True)
 
-    with open(os.path.join(args.latency_path,"processing_times.json"), 'w') as fp:
+    with open(os.path.join(args.latency_path,"result.json"), 'w') as fp:
         json.dump(processing_times, fp, indent=4) 
 
     
-    with open(os.path.join(args.latency_path,"processing_times.txt"),"w") as f:
+    with open(os.path.join(args.latency_path,"result.txt"),"w") as f:
         f.write(f"Processing time statistics\n")
         f.write(f"Global statistics:\n")
         f.write(f"Number of files: {len(processing_times)}\n\n")
@@ -26,7 +26,7 @@ def export_processing_times(args, processing_timess):
         all_processing_times = []
         f.write(f"All segements statistics:\n")
         for i in processing_times:
-            all_processing_times += processing_times[i]['segments_processing_times']
+            all_processing_times += processing_times[i]['segment_processing_time']
         f.write(f"\tNumber of segements: {len(all_processing_times)}\n")
         f.write(f"\tTotal time: {np.sum(all_processing_times):.2f}\n")
         f.write(f"\tMean: {np.mean(all_processing_times):.2f}\n")
@@ -36,13 +36,13 @@ def export_processing_times(args, processing_timess):
         f.write(f"\tMedian: {np.median(all_processing_times):.2f}\n\n")
         f.write(f"Processing time statistics per file:\n")
         for i in processing_times:
-            f.write(f"\t{i}: {len(processing_times[i]['segments_duration'])} processing_times values\n")
-            f.write(f"\t\tTotal time: {np.sum(processing_times[i]['segments_processing_times']):.2f}\n")
-            f.write(f"\t\tMean: {np.mean(processing_times[i]['segments_processing_times']):.2f}\n")
-            f.write(f"\t\tMax: {np.max(processing_times[i]['segments_processing_times']):.2f}\n")
-            f.write(f"\t\tMin: {np.min(processing_times[i]['segments_processing_times']):.2f}\n")
-            f.write(f"\t\tStd: {np.std(processing_times[i]['segments_processing_times']):.2f}\n")
-            f.write(f"\t\tMedian: {np.median(processing_times[i]['segments_processing_times']):.2f}\n")
+            f.write(f"\t{i}: {len(processing_times[i]['segment_duration'])} processing_times values\n")
+            f.write(f"\t\tTotal time: {np.sum(processing_times[i]['segment_processing_time']):.2f}\n")
+            f.write(f"\t\tMean: {np.mean(processing_times[i]['segment_processing_time']):.2f}\n")
+            f.write(f"\t\tMax: {np.max(processing_times[i]['segment_processing_time']):.2f}\n")
+            f.write(f"\t\tMin: {np.min(processing_times[i]['segment_processing_time']):.2f}\n")
+            f.write(f"\t\tStd: {np.std(processing_times[i]['segment_processing_time']):.2f}\n")
+            f.write(f"\t\tMedian: {np.median(processing_times[i]['segment_processing_time']):.2f}\n")
         
 
 def export_params(args):
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     parser.add_argument('--offline', action="store_true", default=False, help='Offline mode.')
     parser.add_argument('--comp_unaware', action="store_true", default=False, help='Computationally unaware simulation.')
     parser.add_argument('--device', type=str, default="cuda", choices=["cuda", "cpu"],help='Device used.')
-    parser.add_argument('--compute_type', type=str, default="int8", choices=["int8", "fp16", "fp32", "int8_float16"], help='Computation type (int8, fp16...).')
+    parser.add_argument('--compute_type', type=str, default="int8", choices=["int8", "float16", "float32", "int8_float16"], help='Computation type (int8, float16...).')
     parser.add_argument('--latency_path', type=str, default="latency", help='Where to store the processing_times.')
     parser.add_argument('--method', type=str, default="beam_search", choices=["beam_search", "greedy"],help='Greedy or beam search decoding.')
     parser.add_argument('--verbose', default=1, help='Verbose mode.')
@@ -83,6 +83,8 @@ if __name__ == "__main__":
 
     if args.verbose==2:
         logging.basicConfig(filename="log.txt", filemode="w", level=logging.DEBUG)
+        logging.getLogger('numba').setLevel(logging.WARNING)
+        logging.getLogger('faster_whisper').setLevel(logging.WARNING)
     elif args.verbose==1:
         logging.basicConfig(filename="log.txt", filemode="w", level=logging.INFO)
     else:
@@ -123,7 +125,7 @@ if __name__ == "__main__":
 
     if args.vad:
         logger.info("setting VAD filter")
-        asr.use_vad()
+        asr.use_vad(args.vad if args.vad!=True else None)
 
     
     min_chunk = args.min_chunk_size
@@ -162,7 +164,7 @@ if __name__ == "__main__":
         beg = args.start_at
         start = time.time()-beg
 
-        processing_times[audio_path] = {'segments_duration' : [], 'segments_timestamps': [], 'segments_processing_times': []}
+        processing_times[audio_path] = {'segment_duration' : [], 'segment_timestamps': [], 'segment_processing_time': []}
         if args.offline: ## offline mode processing (for testing/debugging)
             start_time = time.time()
             a = load_audio(audio_path)
@@ -177,7 +179,7 @@ if __name__ == "__main__":
                 output_transcript(o, start)
             processing_times[audio_path]['segments_duration'].append(duration)
             processing_times[audio_path]['segments_timestamps'].append((0,duration))
-            processing_times[audio_path]['segments_processing_times'].append(end_time-start_time)
+            processing_times[audio_path]['segments_processing_time'].append(end_time-start_time)
             logger.info(f"Finished processing {audio_path} in {end_time-start_time:.2f}s")
             now = None
         elif args.comp_unaware:  # computational unaware mode 
@@ -196,9 +198,9 @@ if __name__ == "__main__":
                     else:
                         output_transcript(o, start, now=end)
                     logger.debug(f"## last processed {end:.2f}s")
-                    processing_times[audio_path]['segments_duration'].append(end-beg)
-                    processing_times[audio_path]['segments_timestamps'].append((beg,end))
-                    processing_times[audio_path]['segments_processing_times'].append(end_time-start_time)
+                    processing_times[audio_path]['segment_duration'].append(end-beg)
+                    processing_times[audio_path]['segment_timestamps'].append((beg,end))
+                    processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
                     if end >= duration:
                         pbar.n = round(duration,3)
                         pbar.refresh()
@@ -213,7 +215,7 @@ if __name__ == "__main__":
                 now = duration
         
         else: # online = simultaneous mode
-            processing_times[audio_path]['latencies'] = []
+            processing_times[audio_path]['segment_latency'] = []
             end = 0
             with tqdm(total=duration) as pbar:
                 while True:
@@ -226,6 +228,8 @@ if __name__ == "__main__":
                     a = load_audio_chunk(audio_path,beg,end)
                     
                     online.insert_audio_chunk(a)
+                    processing_times[audio_path]['segment_duration'].append(len(online.audio_buffer)/online.SAMPLING_RATE)
+                    processing_times[audio_path]['segment_timestamps'].append((online.buffer_time_offset,online.buffer_time_offset+len(online.audio_buffer)/online.SAMPLING_RATE))
                     try:
                         o = online.process_iter()
                         end_time = time.time()
@@ -237,10 +241,8 @@ if __name__ == "__main__":
                         output_transcript(o,start)
                     
                     now = time.time() - start
-                    processing_times[audio_path]['segments_duration'].append(end-beg)
-                    processing_times[audio_path]['segments_timestamps'].append((beg,end))
-                    processing_times[audio_path]['segments_processing_times'].append(end_time-start_time)
-                    processing_times[audio_path]['latencies'].append(now-end)
+                    processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
+                    processing_times[audio_path]['segment_latency'].append(now-end)
                     logger.debug(f"## last processed {end:.2f} s, now is {now:.2f}, the latency is {now-end:.2f}")
                     pbar.n = round(end,3)
                     pbar.refresh()

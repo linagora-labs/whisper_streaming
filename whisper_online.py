@@ -43,7 +43,7 @@ class ASRBase:
     def transcribe(self, audio, init_prompt=""):
         raise NotImplemented("must be implemented in the child class")
 
-    def use_vad(self):
+    def use_vad(self, vad_name=None):
         raise NotImplemented("must be implemented in the child class")
 
 
@@ -61,6 +61,12 @@ class WhisperTimestampedASR(ASRBase):
         self.transcribe_kargs["best_of"] = None
         self.transcribe_kargs["temperature"] = 0
         self.transcribe_kargs["condition_on_previous_text"] = False
+        if compute_type is not None:
+            if compute_type == "float16":
+                compute_type = True
+            else:
+                compute_type = None
+        self.transcribe_kargs['fp16'] = compute_type
 
 
     def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda", compute_type=None):
@@ -69,8 +75,6 @@ class WhisperTimestampedASR(ASRBase):
         self.transcribe_timestamped = transcribe_timestamped
         if model_dir is not None:
             logger.info("ignoring model_dir, not implemented")
-        if compute_type is not None:
-            logger.info("ignoring compute_type, not implemented")
         return whisper.load_model(modelsize, download_root=cache_dir, device=device)
 
     def transcribe(self, audio, init_prompt=""):
@@ -91,8 +95,11 @@ class WhisperTimestampedASR(ASRBase):
     def segments_end_ts(self, res):
         return [s["end"] for s in res["segments"]]
 
-    def use_vad(self):
-        self.transcribe_kargs["vad"] = True
+    def use_vad(self, vad_name=None):
+        if vad_name is None:
+            self.transcribe_kargs["vad"] = True
+        else:
+            self.transcribe_kargs["vad"] = vad_name
 
     def set_translate_task(self):
         self.transcribe_kargs["task"] = "translate"
@@ -161,7 +168,7 @@ class FasterWhisperASR(ASRBase):
     def segments_end_ts(self, res):
         return [s.end for s in res]
 
-    def use_vad(self):
+    def use_vad(self, vad_name=None):
         self.transcribe_kargs["vad_filter"] = True
 
     def set_translate_task(self):
@@ -201,7 +208,7 @@ class HypothesisBuffer:
                         if c == tail:
                             logger.debug(f"removing last {i} words:")
                             for j in range(i):
-                                logger.debug(f"\\t{self.new.pop(0)}")
+                                logger.debug(f"\t{self.new.pop(0)}")
                             break
 
     def flush(self):
@@ -295,7 +302,7 @@ class OnlineASRProcessor:
         prompt, non_prompt = self.prompt()
         logger.debug(f"PROMPT:{prompt}")
         logger.debug(f"CONTEXT:{non_prompt}")
-        logger.debug(f"transcribing {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f} seconds from {self.buffer_time_offset:2.2f}")
+        logger.debug(f"Transcribing {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f} seconds starting at {self.buffer_time_offset:2.2f}s")
         res = self.asr.transcribe(self.audio_buffer, init_prompt=prompt)
 
         # transform to [(beg,end,"word1"), ...]
@@ -355,6 +362,7 @@ class OnlineASRProcessor:
         if self.commited == []: return
 
         ends = self.asr.segments_end_ts(res)
+        print("ends",ends)
 
         t = self.commited[-1][1]
 
@@ -366,7 +374,7 @@ class OnlineASRProcessor:
                 e = ends[-2]+self.buffer_time_offset
             if e <= t:
                 logger.debug(f"--- segment chunked at {e:2.2f}")
-                self.chunk_at(e)
+                self.chunk_at(e)#+self.buffer_time_offset)
             else:
                 logger.debug(f"--- last segment not within commited area")
         else:
