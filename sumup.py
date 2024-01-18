@@ -51,8 +51,8 @@ def plot_processting_times_of_files(row, output_path='plots'):
     data_names = row['data'].keys()
     for j in data_names:
         lv = row['data'][j]
-        plot_mean.append(np.mean(lv['segments_processing_times']))
-        plot_std.append(np.std(lv['segments_processing_times']))
+        plot_mean.append(np.mean(lv['segment_processing_time']))
+        plot_std.append(np.std(lv['segment_processing_time']))
     # print(data_names)
     data_names = [x.split('/')[-1] for x in data_names]
     data_names = [x[0:14] for x in data_names]
@@ -65,79 +65,90 @@ def plot_processting_times_of_files(row, output_path='plots'):
     plt.xticks(rotation=40)
     ax.set_ylabel('processing time [s]')
     ax.set_title('processing time')
-    plt.savefig(os.path.join(output_path,'processing_times_per_file.png'))
+    plt.savefig(os.path.join(output_path,'processing_time_per_file.png'))
     plt.close()
 
-def get_stats(row):
+def get_values(row):
     data_names = row['data'].keys()
     plot_mean= []
-    plot_std = []
     for j in data_names:
         lv = row['data'][j]
-        plot_mean.append(np.sum(lv['latencies']))
-        plot_std.append(np.sum(lv['segments_duration']))
-    return np.concatenate(plot_mean), 0
-
+        plot_mean.append(lv['segment_latency'])
+    return plot_mean[0]
 
 def plot(data):
     data_gpu = search_rows_by_key(data, 'device', 'gpu')
     # plot_processting_times_per_params(data_gpu, "GPU processing times", output_path='plots/gpu')
     # data_cpu = search_rows(data, 'device', 'cpu')
     # plot_processting_times_per_params(data_cpu, "CPU processing times" ,output_path='plots/cpu')
-    plot_param(data_gpu, param="vad", title="VAD GPU processing times", output_path='plots/gpu')
+    plot_param(data_gpu, param="vad", title="Latency depending on precision on 1080TI (GPU)", output_path='plots/gpu', hardware="koios", device="gpu", backend="faster", method="greedy", vad=False)
 
-def plot_param(data, param="vad", title="Processing times", output_path='plots'):
+def plot_param(data, param="vad", title="Latency", output_path='plots', xlabel='params', ylabel='Latency [s]', hardware=None, device=None, backend=None, compute_type=None, method=None, vad=None):
     os.makedirs(output_path, exist_ok=True)
+    description = [f"hardware: {hardware}" if hardware is not None else ""]
+    description.append(f"device: {device}" if device is not None else "")
+    description.append(f"backend: {backend}" if backend is not None else "")
+    description.append(f"compute_type: {compute_type}" if compute_type is not None else "")
+    description.append(f"method: {method}" if method is not None else "")
+    description.append(f"vad: {vad}" if vad is not None else "")
+    description = [x for x in description if x != ""]
+    if len(description) > 4:
+        description[2] = "\n" + description[2]
+    description = ', '.join(description)
     # plt.rcParams["figure.figsize"] = (12,10)
-    data = search_rows(data, compute_type="fp16", hardware="koios", device="gpu")
+    data = search_rows(data, hardware=hardware, device=device, backend=backend, compute_type=compute_type, method=method, vad=vad)
     fig, ax = plt.subplots()    
-    plot_mean= []
-    plot_std = []
+    plot_values= []
     plot_names = []
-    plot_labels = []
     for row in data:
-        m, std = get_stats(row)
-        plot_mean.append(m)
-        plot_std.append(std)
-        plot_names.append(f"{row['backend']}_{row['compute_type']}_\n{row['method']}_{'VAD' if row['vad'] else 'NoVAD'}")
-        plot_labels.append('VAD' if row[param] else 'NoVAD')
-    for i, label in enumerate(list(set(plot_labels))):
-        lplot_mean= []
-        lplot_names = []
-        lplot_colors = []
-        for j in range(len(plot_labels)):
-            if plot_labels[j] == label:
-                lplot_mean.append(plot_mean[j])
-                lplot_names.append(plot_names[j])
-                lplot_colors.append(COLORS_DICT[i])
-        ax.bar(lplot_names, lplot_mean, color=lplot_colors, label=label)
-    ax.set_xlabel('params')
+        m = get_values(row)
+        plot_values.append(m)
+        name = f"{row['backend']}_" if backend is None else "" 
+        name += f"{row['compute_type']}_" if compute_type is None else ""
+        name += f"{row['method']}_" if method is None else ""
+        name += f"{'VAD_' if row['vad'] else 'NoVAD_'}" if vad is None else ""
+        name = name[:-1]
+        plot_names.append(name)
+    # for i, label in enumerate(list(set(plot_labels))):
+    #     lplot_values= []
+    #     lplot_names = []
+    #     lplot_colors = []
+    #     for j in range(len(plot_labels)):
+    #         if plot_labels[j] == label:
+    #             lplot_values.append(plot_values[j])
+    #             lplot_names.append(plot_names[j])
+    #             lplot_colors.append(COLORS_DICT[i])
+        # ax.bar(lplot_names, lplot_mean, color=lplot_colors, label=label)
+    ax.violinplot(plot_values, showmedians=True, quantiles=[[0.25, 0.75] for i in range(len(plot_values))], showextrema=False)
+
+    ax.set_xlabel(description)
+    ax.set_xticks([y + 1 for y in range(len(plot_names))], labels=plot_names)
     plt.xticks(rotation=25)
-    ax.set_ylabel('processing time [s]')
+    ax.set_ylabel(ylabel)
     ax.set_title(title)
-    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-    plt.savefig(os.path.join(output_path,f'{title}_{param}.png'), bbox_inches='tight')
+    # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.savefig(os.path.join(output_path,f'{title}.png'), bbox_inches='tight')
     plt.close()
 
-def plot_processting_times_per_params(data, title="Processing times", output_path='plots'):
-    os.makedirs(output_path, exist_ok=True)
-    fig, ax = plt.subplots(nrows=2, ncols=2)    
-    plot_mean= []
-    plot_std = []
-    plot_names = []
-    for row in data:
-        m, std = get_stats(row)
-        plot_mean.append(m)
-        plot_std.append(std)
-        plot_names.append(f"{row['hardware']}_{row['compute_type']}_{row['method']}_{row['vad']}")
-    #plot mean and std for each file
-    ax.bar(plot_names, plot_mean)
-    ax.set_xlabel('params')
-    plt.xticks(rotation=40)
-    ax.set_ylabel('processing time [s]')
-    ax.set_title(title)
-    plt.savefig(os.path.join(output_path,f'{title}.png'))
-    plt.close()
+# def plot_processting_times_per_params(data, title="Processing times", output_path='plots'):
+#     os.makedirs(output_path, exist_ok=True)
+#     fig, ax = plt.subplots(nrows=2, ncols=2)    
+#     plot_mean= []
+#     plot_std = []
+#     plot_names = []
+#     for row in data:
+#         m, std = get_values(row)
+#         plot_mean.append(m)
+#         plot_std.append(std)
+#         plot_names.append(f"{row['hardware']}_{row['compute_type']}_{row['method']}_{row['vad']}")
+#     #plot mean and std for each file
+#     ax.bar(plot_names, plot_mean)
+#     ax.set_xlabel('params')
+#     plt.xticks(rotation=40)
+#     ax.set_ylabel('processing time [s]')
+#     ax.set_title(title)
+#     plt.savefig(os.path.join(output_path,f'{title}.png'))
+#     plt.close()
 
 if __name__ == '__main__':
 
@@ -162,13 +173,13 @@ if __name__ == '__main__':
                 params = [x.split('_') for x in params]
                 compute_types = [x[0] for x in params]
                 vads = [True if len(x)>1 and x[1]=="vad" else False for x in params]
-                methods = ["greedy" if len(x)>2 or (len(x)>1 and x[1]=="greedy") else "beam_search" for x in params]
+                methods = ["beam_search" if len(x)>2 or (len(x)>1 and x[1]=="beam_search") else "greedy" for x in params]
                 for i, exec in enumerate(execs):
-                    with open(os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'processing_times.json'), 'r') as f:
+                    with open(os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'result.json'), 'r') as f:
                         raw_data = json.load(f)
                         data.append({'hardware': hardware,'device': device, 'backend': backend, 'compute_type': compute_types[i], 'vad': vads[i], 'method': methods[i], 
                                         'data': raw_data})
     os.makedirs('plots', exist_ok=True)
-    plot_processting_times_of_files(search_row(data, 'koios', 'gpu', 'faster', 'int8', False, 'beam_search'))
+    # plot_processting_times_of_files(search_row(data, 'koios', 'gpu', 'faster', 'int8', False, 'beam_search'))
     plot(data)
 

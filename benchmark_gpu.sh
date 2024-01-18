@@ -22,14 +22,14 @@ mkdir -p $path_gpu_tw
 
 
 # Faster whisper - test precision - no vad, greedy
-# time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_fw/int8 > $path_gpu_fw/int8.txt
-# time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_fw/float16 --compute_type float16 > $path_gpu_fw/float16.txt
-# time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_fw/float32 --compute_type float32 > $path_gpu_fw/float32.txt
-# time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_fw/int8float16 --compute_type int8_float16 > $path_gpu_fw/int8float16.txt
+# time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_fw/int8_greedy > $path_gpu_fw/int8_greedy.txt
+# time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_fw/float16_greedy --compute_type float16 > $path_gpu_fw/float16_greedy.txt
+# time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_fw/float32_greedy --compute_type float32 > $path_gpu_fw/float32_greedy.txt
+# time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_fw/int8float16_greedy --compute_type int8_float16 > $path_gpu_fw/int8float16_greedy.txt
 
 # Whisper Timestamped - test precision - no vad, greedy
-time python benchmark.py $data --model $size --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_tw/float32 > $path_gpu_tw/float32.txt
-time python benchmark.py $data --model $size --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_tw/float16 --compute_type float16 > $path_gpu_tw/float16.txt
+time python benchmark.py $data --model $size --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_tw/float32_greedy > $path_gpu_tw/float32_greedy.txt
+time python benchmark.py $data --model $size --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method greedy --latency_path $path_gpu_tw/float16_greedy --compute_type float16 > $path_gpu_tw/float16_greedy.txt
 
 # Test VAD - both backends, best precision (fp32 for timestamped, int8 for faster), beam search and greedy
 
