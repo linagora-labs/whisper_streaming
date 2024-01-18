@@ -1,5 +1,6 @@
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=1
+export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"
 min_chunk_size=2
 data=${2:-../data/smartphone.mp3}
 size=${3:-small}
