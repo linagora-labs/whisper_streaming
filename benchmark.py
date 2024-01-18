@@ -1,14 +1,19 @@
-from whisper_online import * 
+import logging
+logging.basicConfig(filename="log.txt", filemode="w")
+logger = logging.getLogger(__name__)
 
+import whisper_online
 import argparse
 import os
 import csv
 import json
-
+import torch
+import time
+import sys
+import numpy as np
 
 from tqdm import tqdm
-from pathlib import Path
-from ast import literal_eval
+from linastt.utils.monitoring import tic, toc, vram_peak, ram_peak 
 
 def export_processing_times(args, processing_timess):
 
@@ -59,6 +64,8 @@ def export_params(args):
         f.write(f"Offline: {args.offline}\n")
         f.write(f"Comp unaware: {args.comp_unaware}\n")
         f.write(f"Device: {args.device}\n")
+        if args.device == "cuda":
+            f.write(f"GPU: {torch.cuda.get_device_name()}")
         f.write(f"Latency path: {args.latency_path}\n")
 
 
@@ -67,7 +74,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('audio_path', type=str, help="Filename (or folder) of 16kHz mono channel wav, on which live streaming is simulated.")
     # parser.add_argument('--folder', action="store_true", help="If set, audio_path is a folder with wav files, not a single file.")
-    add_shared_args(parser)
+    whisper_online.add_shared_args(parser)
     parser.add_argument('--start_at', type=float, default=0.0, help='Start processing audio at this time.')
     parser.add_argument('--offline', action="store_true", default=False, help='Offline mode.')
     parser.add_argument('--comp_unaware', action="store_true", default=False, help='Computationally unaware simulation.')
@@ -80,17 +87,17 @@ if __name__ == "__main__":
 
     # reset to store stderr to different file stream, e.g. open(os.devnull,"w")
     # logfile = sys.stderr
-
     if args.verbose==2:
-        logging.basicConfig(filename="log.txt", filemode="w", level=logging.DEBUG)
-        logging.getLogger('numba').setLevel(logging.WARNING)
-        logging.getLogger('faster_whisper').setLevel(logging.WARNING)
+        logging.getLogger(__name__).setLevel(level=logging.DEBUG)
+        # logging.getLogger('numba').setLevel(logging.WARNING)
+        # logging.getLogger('faster_whisper').setLevel(logging.WARNING)
     elif args.verbose==1:
-        logging.basicConfig(filename="log.txt", filemode="w", level=logging.INFO)
+        logging.getLogger(__name__).setLevel(level=logging.INFO)
     else:
+        logging.getLogger(__name__).setLevel(level=logging.ERROR)
         logging.basicConfig(filename="log.txt", filemode="w", level=logging.ERROR)  
-    logger= logging.getLogger(__name__)
-
+   
+    
     if args.offline and args.comp_unaware:
         logger.error("No or one option from --offline and --comp_unaware are available, not both. Exiting.")
         sys.exit(1)
@@ -102,9 +109,9 @@ if __name__ == "__main__":
     logger.info(f"Loading Whisper {size} model for {language}...")
 
     if args.backend == "faster-whisper":
-        asr_cls = FasterWhisperASR
+        asr_cls = whisper_online.FasterWhisperASR
     else:
-        asr_cls = WhisperTimestampedASR
+        asr_cls = whisper_online.WhisperTimestampedASR
 
     asr = asr_cls(modelsize=size, lan=language, cache_dir=args.model_cache_dir, model_dir=args.model_dir, device=args.device, compute_type=args.compute_type)
 
@@ -130,10 +137,10 @@ if __name__ == "__main__":
     
     min_chunk = args.min_chunk_size
     if args.buffer_trimming == "sentence":
-        tokenizer = create_tokenizer(tgt_language)
+        tokenizer = whisper_online.create_tokenizer(tgt_language)
     else:
         tokenizer = None
-    online = OnlineASRProcessor(asr,tokenizer,logfile=logger,buffer_trimming=(args.buffer_trimming, args.buffer_trimming_sec))
+    online = whisper_online.OnlineASRProcessor(asr,tokenizer,logfile=logger,buffer_trimming=(args.buffer_trimming, args.buffer_trimming_sec))
 
     if os.path.isdir(args.audio_path): 
         audios_path = os.listdir(args.audio_path)
@@ -150,13 +157,13 @@ if __name__ == "__main__":
         if not audio_path.endswith(".wav") and not audio_path.endswith(".mp3"):
             continue
         SAMPLING_RATE = 16000
-        duration = len(load_audio(audio_path))/SAMPLING_RATE
+        duration = len(whisper_online.load_audio(audio_path))/SAMPLING_RATE
 
         logger.info(f"Processing {audio_path} (duration is {duration:.2f}s)")
 
 
         # load the audio into the LRU cache before we start the timer
-        a = load_audio_chunk(audio_path,0,1)
+        a = whisper_online.load_audio_chunk(audio_path,0,1)
 
         # warm up the ASR, because the very first transcribe takes much more time than the other
         asr.transcribe(a)
@@ -164,10 +171,11 @@ if __name__ == "__main__":
         beg = args.start_at
         start = time.time()-beg
 
-        processing_times[audio_path] = {'segment_duration' : [], 'segment_timestamps': [], 'segment_processing_time': []}
+        processing_times[audio_path] = {'max_vram': -1,'segment_duration' : [], 'segment_timestamps': [], 'segment_processing_time': []}
+        tic()
         if args.offline: ## offline mode processing (for testing/debugging)
             start_time = time.time()
-            a = load_audio(audio_path)
+            a = whisper_online.load_audio(audio_path)
             online.insert_audio_chunk(a)
             try:
                 o = online.process_iter()
@@ -176,7 +184,7 @@ if __name__ == "__main__":
                 logger.info("assertion error")
                 pass
             else:
-                output_transcript(o, start)
+                whisper_online.output_transcript(o, start)
             processing_times[audio_path]['segments_duration'].append(duration)
             processing_times[audio_path]['segments_timestamps'].append((0,duration))
             processing_times[audio_path]['segments_processing_time'].append(end_time-start_time)
@@ -187,7 +195,7 @@ if __name__ == "__main__":
             with tqdm(total=duration) as pbar:
                 while True:
                     start_time = time.time()
-                    a = load_audio_chunk(audio_path,beg,end)
+                    a = whisper_online.load_audio_chunk(audio_path,beg,end)
                     online.insert_audio_chunk(a)
                     try:
                         o = online.process_iter()
@@ -196,7 +204,7 @@ if __name__ == "__main__":
                         logger.info("assertion error")
                         pass
                     else:
-                        output_transcript(o, start, now=end)
+                        whisper_online.output_transcript(o, start, now=end)
                     logger.debug(f"## last processed {end:.2f}s")
                     processing_times[audio_path]['segment_duration'].append(end-beg)
                     processing_times[audio_path]['segment_timestamps'].append((beg,end))
@@ -225,7 +233,7 @@ if __name__ == "__main__":
                     end = time.time() - start
 
                     start_time = time.time()
-                    a = load_audio_chunk(audio_path,beg,end)
+                    a = whisper_online.load_audio_chunk(audio_path,beg,end)
                     
                     online.insert_audio_chunk(a)
                     processing_times[audio_path]['segment_duration'].append(len(online.audio_buffer)/online.SAMPLING_RATE)
@@ -238,7 +246,7 @@ if __name__ == "__main__":
                         logger.info("assertion error")
                         pass
                     else:
-                        output_transcript(o,start)
+                        whisper_online.output_transcript(o,start)
                     
                     now = time.time() - start
                     processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
@@ -253,8 +261,16 @@ if __name__ == "__main__":
                 now = None
 
         o = online.finish()
-        output_transcript(o, start, now=now)
-
+        if args.device == "cuda":
+            processing_times[audio_path]['max_vram'] = vram_peak()
+            logger.info(f'Number of GPUS {os.environ["CUDA_VISIBLE_DEVICES"]}')
+            logger.info(torch.cuda.get_device_name())
+        else:
+            processing_times[audio_path]['max_vram'] = ram_peak()
+        toc()
+        logging.getLogger(__name__).setLevel(level=logging.INFO)
+        whisper_online.output_transcript(o, start, now=now)
+        
     export_processing_times(args, processing_times)
     export_params(args)
 

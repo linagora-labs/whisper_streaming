@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
+import logging
 import sys
 import numpy as np
 import librosa  
 import time
-import logging
+
 from functools import lru_cache
 
 logger = logging.getLogger(__name__)
-
 
 @lru_cache
 def load_audio(fname):
@@ -362,7 +362,6 @@ class OnlineASRProcessor:
         if self.commited == []: return
 
         ends = self.asr.segments_end_ts(res)
-        print("ends",ends)
 
         t = self.commited[-1][1]
 
@@ -505,10 +504,10 @@ def output_transcript(o, start, now=None):
         now = time.time()
     if o[0] is not None:
         logger.info("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]))
-        print("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]), flush=True)
+        # print("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]), flush=True)
     else:
         logger.info(o)
-        print(o, flush=True)
+        # print(o, flush=True)
 
 ## main:
 if __name__ == "__main__":
@@ -581,20 +580,6 @@ if __name__ == "__main__":
     beg = args.start_at
     start = time.time()-beg
 
-    def output_transcript(o, now=None):
-        # output format in stdout is like:
-        # 4186.3606 0 1720 Takhle to je
-        # - the first three words are:
-        #    - emission time from beginning of processing, in milliseconds
-        #    - beg and end timestamp of the text segment, as estimated by Whisper model. The timestamps are not accurate, but they're useful anyway
-        # - the next words: segment transcript
-        if now is None:
-            now = time.time()-start
-        if o[0] is not None:
-            print("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]),file=logfile,flush=True)
-            print("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]),flush=True)
-        else:
-            print(o,file=logfile,flush=True)
 
     if args.offline: ## offline mode processing (for testing/debugging)
         a = load_audio(audio_path)
