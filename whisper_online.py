@@ -65,7 +65,7 @@ class WhisperTimestampedASR(ASRBase):
             if compute_type == "float16":
                 compute_type = True
             else:
-                compute_type = None
+                compute_type = False
         self.transcribe_kargs['fp16'] = compute_type
 
 
@@ -487,7 +487,7 @@ def add_shared_args(parser):
     parser.add_argument('--lan', '--language', type=str, default='en', help="Language code for transcription, e.g. en,de,cs.")
     parser.add_argument('--task', type=str, default='transcribe', choices=["transcribe","translate"],help="Transcribe or translate.")
     parser.add_argument('--backend', type=str, default="faster-whisper", choices=["faster-whisper", "whisper_timestamped"],help='Load only this backend for Whisper processing.')
-    parser.add_argument('--vad', action="store_true", default=False, help='Use VAD = voice activity detection, with the default parameters.')
+    parser.add_argument('--vad', action='store', default=False, const=True, nargs='?', help='Use VAD = voice activity detection, with the default parameters.')
     parser.add_argument('--buffer_trimming', type=str, default="segment", choices=["sentence", "segment"],help='Buffer trimming strategy -- trim completed sentences marked with punctuation mark and detected by sentence segmenter, or the completed segments returned by Whisper. Sentence segmenter must be installed for "sentence" option.')
     parser.add_argument('--buffer_trimming_sec', type=float, default=15, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')
 

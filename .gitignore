@@ -134,5 +134,5 @@ dmypy.json
 notes.txt
 benchmark_offline.sh
 benchmark_unaware.sh
-processing_times_per_file.png
-processing_times_per_params.png
+
+plots/

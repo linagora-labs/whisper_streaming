@@ -81,7 +81,7 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=str, default="cuda", choices=["cuda", "cpu"],help='Device used.')
     parser.add_argument('--compute_type', type=str, default="int8", choices=["int8", "float16", "float32", "int8_float16"], help='Computation type (int8, float16...).')
     parser.add_argument('--latency_path', type=str, default="latency", help='Where to store the processing_times.')
-    parser.add_argument('--method', type=str, default="beam_search", choices=["beam_search", "greedy"],help='Greedy or beam search decoding.')
+    parser.add_argument('--method', type=str, default="beam-search", choices=["beam-search", "greedy"],help='Greedy or beam search decoding.')
     parser.add_argument('--verbose', default=1, help='Verbose mode.')
     args = parser.parse_args()
 
@@ -129,11 +129,10 @@ if __name__ == "__main__":
 
     e = time.time()
     logger.info(f"Loading finished. It took {e-t:.2f} seconds.")
-
+    
     if args.vad:
-        logger.info("setting VAD filter")
+        logger.info(f"setting VAD filter {args.vad}")
         asr.use_vad(args.vad if args.vad!=True else None)
-
     
     min_chunk = args.min_chunk_size
     if args.buffer_trimming == "sentence":
