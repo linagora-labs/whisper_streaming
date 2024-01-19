@@ -26,7 +26,7 @@ time python benchmark.py $data --device cpu --model $size --language $language -
 time python benchmark.py $data --device cpu --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --latency_path $path_cpu_fw/float32_greedy --compute_type float32 
 time python benchmark.py $data --device cpu --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --latency_path $path_cpu_fw/int8float16_greedy --compute_type int8_float16 
 
-# # Whisper Timestamped - test precision - no vad, greedy
+# Whisper Timestamped - test precision - no vad, greedy
 time python benchmark.py $data --device cpu --model $size --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method greedy --latency_path $path_cpu_tw/float32_greedy 
 time python benchmark.py $data --device cpu --model $size --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method greedy --latency_path $path_cpu_tw/float16_greedy --compute_type float16 
 
