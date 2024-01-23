@@ -28,7 +28,7 @@ class ASRBase:
     sep = " "   # join transcribe words with this character (" " for whisper_timestamped,
                 # "" for faster-whisper because it emits the spaces when neeeded)
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None, condition_on_previous_text=None):
         self.logfile = logfile
 
         self.transcribe_kargs = {}
@@ -54,13 +54,15 @@ class WhisperTimestampedASR(ASRBase):
 
     sep = " "
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None, condition_on_previous_text=None):
         super().__init__(lan, modelsize, cache_dir, model_dir, device, logfile, compute_type)
         self.transcribe_kargs["verbose"] = None
         self.transcribe_kargs["beam_size"] = None
         self.transcribe_kargs["best_of"] = None
         self.transcribe_kargs["temperature"] = 0
-        self.transcribe_kargs["condition_on_previous_text"] = False
+        self.transcribe_kargs['condition_on_previous_text'] = False
+        if condition_on_previous_text is not None:
+            self.transcribe_kargs['condition_on_previous_text'] = condition_on_previous_text
         if compute_type is not None:
             if compute_type == "float16":
                 compute_type = True
@@ -113,13 +115,16 @@ class FasterWhisperASR(ASRBase):
 
     sep = ""
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type="int8"):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type="int8", condition_on_previous_text=None):
 
         super().__init__(lan, modelsize, cache_dir, model_dir, device, logfile, compute_type)
         self.transcribe_kargs['beam_size'] = 1
         self.transcribe_kargs['best_of'] = 1
         self.transcribe_kargs['temperature'] = 0
         self.transcribe_kargs['condition_on_previous_text'] = False
+        if condition_on_previous_text is not None:
+            self.transcribe_kargs['condition_on_previous_text'] = condition_on_previous_text
+        
 
 
     def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda", compute_type="int8"):
@@ -132,9 +137,11 @@ class FasterWhisperASR(ASRBase):
         else:
             raise ValueError("modelsize or model_dir parameter must be set")
 
-        if device=="cpu" and self.model_kwargs['compute_type']=="float16":
+        if device=="cpu" and compute_type=="float16":
             self.compute_type = "int8"
-        model = WhisperModel(model_size_or_path, device=device, compute_type=compute_type, download_root=cache_dir)
+        else:
+            self.compute_type = compute_type
+        model = WhisperModel(model_size_or_path, device=device, compute_type=self.compute_type, download_root=cache_dir)
 
         # if device == "cuda":
         #     # this worked fast and reliably on NVIDIA L40
@@ -493,21 +500,29 @@ def add_shared_args(parser):
 
 
 
-def output_transcript(o, start, now=None):
+def output_transcript(o, start, now=None, logfile=None):
     # output format in stdout is like:
     # 4186.3606 0 1720 Takhle to je
     # - the first three words are:
     #    - emission time from beginning of processing, in milliseconds
     #    - beg and end timestamp of the text segment, as estimated by Whisper model. The timestamps are not accurate, but they're useful anyway
     # - the next words: segment transcript
-    if now is None:
-        now = time.time()
-    if o[0] is not None:
-        logger.info("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]))
-        # print("%1.4f %1.0f %1.0f %s" % (now*1000, o[0]*1000,o[1]*1000,o[2]), flush=True)
+    if logfile is None:
+        if now is None:
+            now = time.time() - start
+        if o[0] is not None:
+            logger.info(f"{now*1000:1.4f} {o[0]*1000:1.0f} {o[1]*1000:1.0f} {o[2]}")
+        else:
+            logger.info(o)
     else:
-        logger.info(o)
-        # print(o, flush=True)
+        if isinstance(logfile, str):
+            logfile = open(logfile,"w")
+        if now is None:
+            now = time.time() - start
+        if o[0] is not None:
+            print(f"{now*1000:1.4f} {o[0]*1000:1.0f} {o[1]*1000:1.0f} {o[2]}", file=logfile, flush=True)
+        else:
+            print(o, file=logfile, flush=True)
 
 ## main:
 if __name__ == "__main__":

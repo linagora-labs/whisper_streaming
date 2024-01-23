@@ -15,7 +15,7 @@ import numpy as np
 from tqdm import tqdm
 from linastt.utils.monitoring import tic, toc, vram_peak, ram_peak 
 
-def export_processing_times(args, processing_timess):
+def export_processing_times(args, processing_times):
 
     os.makedirs(args.latency_path,exist_ok=True)
 
@@ -57,16 +57,24 @@ def export_params(args):
         f.write(f"Model: {args.model}\n")
         f.write(f"Language: {args.lan}\n")
         f.write(f"Backend: {args.backend}\n")
-        f.write(f"VAD: {args.vad}\n")
-        f.write(f"Buffer trimming: {args.buffer_trimming}\n")
-        f.write(f"Buffer trimming sec: {args.buffer_trimming_sec}\n")
-        f.write(f"Min chunk size: {args.min_chunk_size}\n")
-        f.write(f"Offline: {args.offline}\n")
-        f.write(f"Comp unaware: {args.comp_unaware}\n")
+        f.write(f"Task: {args.task}\n")  
         f.write(f"Device: {args.device}\n")
         if args.device == "cuda":
             f.write(f"GPU: {torch.cuda.get_device_name()}")
+        f.write(f"Offline: {args.offline}\n")
+        f.write(f"Comp unaware: {args.comp_unaware}\n")
+
+        f.write(f"Buffer trimming: {args.buffer_trimming}\n")
+        f.write(f"Buffer trimming sec: {args.buffer_trimming_sec}\n")
+        f.write(f"Min chunk size: {args.min_chunk_size}\n")
+    
         f.write(f"Latency path: {args.latency_path}\n")
+
+        f.write(f"VAD: {args.vad}\n")
+        f.write(f"Method: {args.method}\n")
+        f.write(f"Previous text: {args.previous_text}\n")
+        f.write(f"Compute type: {args.compute_type}\n")
+        f.write(f"Verbose: {args.verbose}\n")
 
 
 if __name__ == "__main__":
@@ -83,6 +91,7 @@ if __name__ == "__main__":
     parser.add_argument('--latency_path', type=str, default="latency", help='Where to store the processing_times.')
     parser.add_argument('--method', type=str, default="beam-search", choices=["beam-search", "greedy"],help='Greedy or beam search decoding.')
     parser.add_argument('--verbose', default=1, help='Verbose mode.')
+    parser.add_argument('--previous_text', action="store_true", default=False, help='Condition on previous text (default False).')
     args = parser.parse_args()
 
     # reset to store stderr to different file stream, e.g. open(os.devnull,"w")
@@ -151,7 +160,7 @@ if __name__ == "__main__":
     processing_times = {}
     latencies = []
     # tqdm loop
-
+    
     for audio_path in tqdm(audios_path, total=len(audios_path)):
         if not audio_path.endswith(".wav") and not audio_path.endswith(".mp3"):
             continue
@@ -171,7 +180,6 @@ if __name__ == "__main__":
         start = time.time()-beg
 
         processing_times[audio_path] = {'max_vram': -1,'segment_duration' : [], 'segment_timestamps': [], 'segment_processing_time': []}
-        tic()
         if args.offline: ## offline mode processing (for testing/debugging)
             start_time = time.time()
             a = whisper_online.load_audio(audio_path)
@@ -264,11 +272,11 @@ if __name__ == "__main__":
             processing_times[audio_path]['max_vram'] = vram_peak()
             logger.info(f'Number of GPUS {os.environ["CUDA_VISIBLE_DEVICES"]}')
             logger.info(torch.cuda.get_device_name())
-        else:
-            processing_times[audio_path]['max_vram'] = ram_peak()
-        toc()
+        # else:
+        #     processing_times[audio_path]['max_vram'] = ram_peak()
         logging.getLogger(__name__).setLevel(level=logging.INFO)
-        whisper_online.output_transcript(o, start, now=now)
+        os.makedirs(os.path.join(args.latency_path,"transcripts"),exist_ok=True)
+        whisper_online.output_transcript(o, start, now=now, logfile=os.path.join(args.latency_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt")))
         
     export_processing_times(args, processing_times)
     export_params(args)

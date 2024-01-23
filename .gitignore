@@ -136,3 +136,4 @@ benchmark_offline.sh
 benchmark_unaware.sh
 
 plots/
+normal_large/

@@ -93,6 +93,15 @@ def plot(data):
     plot_param(data_gpu, title="VRAM usage depending on precision on 1080TI (GPU) for faster-whisper", key='max_vram',output_path='plots/gpu/faster', hardware="koios", device="gpu", backend="faster", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", data_mode='max')
     plot_param(data_gpu, title="VRAM usage depending on precision on 1080TI (GPU) for whisper-timestamped", key='max_vram',output_path='plots/gpu/timestamped', hardware="koios", device="gpu", backend="timestamped", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", data_mode='max')
     plot_param(data_gpu, title="Latency depending on VAD on 1080TI (GPU)", key='segment_latency', output_path='plots/gpu', hardware="koios", device="gpu", method="greedy", compute_type="float32")
+    plot_param(data_gpu, title="Latency depending on VAD on 1080TI (GPU) for faster-whisper", key='segment_latency', output_path='plots/gpu/faster', hardware="koios", device="gpu", backend="faster", method="greedy")
+
+    data_cpu = search_rows_by_key(data, 'device', 'cpu')
+    plot_param(data_cpu, title="Latency depending on precision on CPU for faster-whisper", key='segment_latency', output_path='plots/cpu/faster', hardware="koios", device="cpu", backend="faster", method="greedy", vad='NoVAD')
+    plot_param(data_cpu, title="Latency depending on precision on CPU for whisper-timestamped", key='segment_latency',output_path='plots/cpu/timestamped', hardware="koios", device="cpu", backend="timestamped", method="greedy", vad='NoVAD')
+    plot_param(data_cpu, title="RAM usage depending on precision on CPU for faster-whisper", key='max_vram',output_path='plots/cpu/faster', hardware="koios", device="cpu", backend="faster", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", data_mode='max')
+    plot_param(data_cpu, title="RAM usage depending on precision on CPU for whisper-timestamped", key='max_vram',output_path='plots/cpu/timestamped', hardware="koios", device="cpu", backend="timestamped", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", data_mode='max')
+    plot_param(data_cpu, title="Latency depending on VAD on CPU", key='segment_latency', output_path='plots/cpu', hardware="koios", device="cpu", method="greedy", compute_type="float32")
+    plot_param(data_cpu, title="Latency depending on VAD on CPU for faster-whisper", key='segment_latency', output_path='plots/cpu/faster', hardware="koios", device="cpu", backend="faster", method="greedy")
 
 
 def plot_param(data, title="Latency", key='segment_latency', output_path='plots', ylabel='Latency [s]', data_mode='all', hardware=None, device=None, backend=None, compute_type=None, method=None, vad=None):
@@ -124,6 +133,8 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
         name += f"{row['method']}_" if method is None else ""
         name += f"{row['vad']}_" if vad is None else ""
         name = name[:-1]
+        # print(row['vad'])
+        # print(name)
         plot_names.append(name)
     if data_mode == 'all':
         ax.violinplot(plot_values, showmedians=True, quantiles=[[0.25, 0.75] for i in range(len(plot_values))], showextrema=False)
@@ -145,19 +156,9 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
     plt.savefig(os.path.join(output_path,f'{title}.png'), bbox_inches='tight')
     plt.close()
 
-
-if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data_path', type=str, default='./')
-    args = parser.parse_args()
-
-    data_path = args.data_path
-
+def load_data(data_path):
     hardwares  = os.listdir(data_path)
-
     data = []
-
     for hardware in hardwares:
         devices = os.listdir(os.path.join(data_path, hardware))
         for device in devices:
@@ -168,13 +169,30 @@ if __name__ == '__main__':
                 params = [x.split('.')[0] for x in execs]
                 params = [x.split('_') for x in params]
                 compute_types = [x[0] for x in params]
-                vads = [x[1].upper() if len(x)>1 and x[1].startswith=="vad" else "NoVAD" for x in params]
-                methods = ["beam_search" if len(x)>2 or (len(x)>1 and x[1]=="beam_search") else "greedy" for x in params]
+                data_types = ["silence" if "silence" in x else "speech" for x in params]
+                vads = ["VAD" if "vad" in x else "NoVAD" for x in params]
+                methods = ["beam_search" if "beam" in x  else "greedy" for x in params]
                 for i, exec in enumerate(execs):
-                    with open(os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'result.json'), 'r') as f:
-                        raw_data = json.load(f)
-                        data.append({'hardware': hardware,'device': device, 'backend': backend, 'compute_type': compute_types[i], 'vad': vads[i], 'method': methods[i], 
-                                        'data': raw_data})
+                    if os.path.exists(os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'result.json')):
+                        with open(os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'result.json'), 'r') as f:
+                            raw_data = json.load(f)
+                            data.append({'hardware': hardware,'device': device, 'data_type':data_types[i], 'backend': backend, 'compute_type': compute_types[i], 'vad': vads[i], 'method': methods[i], 
+                                            'data': raw_data})
+                    else:
+                        print(f"Missing result.json for {os.path.join(data_path, hardware, device, backend, exec.split('.')[0])}")
+    return data
+
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_path', type=str, default='./')
+    args = parser.parse_args()
+
+    data_path = args.data_path
+
+    data = load_data(data_path)
+    
     os.makedirs('plots', exist_ok=True)
     plot(data)
 
