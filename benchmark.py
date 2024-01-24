@@ -205,6 +205,7 @@ def init_args():
     parser.add_argument('--verbose', default=1, help='Verbose mode.')
     parser.add_argument('--cpu_threads', default=4, help='When running on CPU, number of threads to use.')
     parser.add_argument('--previous_text', action="store_true", default=False, help='Condition on previous text (default False).')
+    parser.add_argument('--sub_folders', action="store_true", default=False, help='Search audios in subfolders.')
     args = parser.parse_args()
     if args.verbose==2:
         logging.getLogger(__name__).setLevel(level=logging.DEBUG)
@@ -263,7 +264,7 @@ def init_processor(args):
     return online_processor
 
 def get_file_list(args):
-    SUBFOLDERS = True
+    SUBFOLDERS = args.sub_folders
     audios_path = []
     if os.path.isdir(args.audio_path): 
         paths = os.listdir(args.audio_path)

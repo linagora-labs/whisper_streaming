@@ -137,3 +137,6 @@ benchmark_unaware.sh
 
 plots/
 normal_large/
+meeting_wer_acsynt/
+wer/
+normal_wer_/
