@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import librosa  
 import time
+import torch
 
 from functools import lru_cache
 
@@ -28,13 +29,13 @@ class ASRBase:
     sep = " "   # join transcribe words with this character (" " for whisper_timestamped,
                 # "" for faster-whisper because it emits the spaces when neeeded)
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None, condition_on_previous_text=None):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None, condition_on_previous_text=None, cpu_threads=4):
         self.logfile = logfile
 
         self.transcribe_kargs = {}
         self.original_language = lan 
 
-        self.model = self.load_model(modelsize, cache_dir, model_dir, device=device, compute_type=compute_type)
+        self.model = self.load_model(modelsize, cache_dir, model_dir, device=device)
 
 
     def load_model(self, modelsize, cache_dir):
@@ -54,7 +55,7 @@ class WhisperTimestampedASR(ASRBase):
 
     sep = " "
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None, condition_on_previous_text=None):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None, condition_on_previous_text=None, cpu_threads=4):
         super().__init__(lan, modelsize, cache_dir, model_dir, device, logfile, compute_type)
         self.transcribe_kargs["verbose"] = None
         self.transcribe_kargs["beam_size"] = None
@@ -68,10 +69,12 @@ class WhisperTimestampedASR(ASRBase):
                 compute_type = True
             else:
                 compute_type = False
+        if device == "cpu":
+            torch.set_num_threads(cpu_threads)
         self.transcribe_kargs['fp16'] = compute_type
 
 
-    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda", compute_type=None):
+    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda"):
         import whisper
         from whisper_timestamped import transcribe_timestamped
         self.transcribe_timestamped = transcribe_timestamped
@@ -115,8 +118,9 @@ class FasterWhisperASR(ASRBase):
 
     sep = ""
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type="int8", condition_on_previous_text=None):
-
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type="int8", condition_on_previous_text=None, cpu_threads=4):
+        self.compute_type = compute_type
+        self.cpu_threads = cpu_threads
         super().__init__(lan, modelsize, cache_dir, model_dir, device, logfile, compute_type)
         self.transcribe_kargs['beam_size'] = 1
         self.transcribe_kargs['best_of'] = 1
@@ -127,7 +131,7 @@ class FasterWhisperASR(ASRBase):
         
 
 
-    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda", compute_type="int8"):
+    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda"):
         from faster_whisper import WhisperModel
         if model_dir is not None:
             logger.info(f"Loading whisper model from model_dir {model_dir}. modelsize and cache_dir parameters are not used.")
@@ -137,11 +141,9 @@ class FasterWhisperASR(ASRBase):
         else:
             raise ValueError("modelsize or model_dir parameter must be set")
 
-        if device=="cpu" and compute_type=="float16":
+        if device=="cpu" and self.compute_type=="float16":
             self.compute_type = "int8"
-        else:
-            self.compute_type = compute_type
-        model = WhisperModel(model_size_or_path, device=device, compute_type=self.compute_type, download_root=cache_dir)
+        model = WhisperModel(model_size_or_path, device=device, compute_type=self.compute_type, download_root=cache_dir, cpu_threads=self.cpu_threads)
 
         # if device == "cuda":
         #     # this worked fast and reliably on NVIDIA L40

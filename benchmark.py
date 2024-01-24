@@ -60,7 +60,9 @@ def export_params(args):
         f.write(f"Task: {args.task}\n")  
         f.write(f"Device: {args.device}\n")
         if args.device == "cuda":
-            f.write(f"GPU: {torch.cuda.get_device_name()}")
+            f.write(f"GPU: {torch.cuda.get_device_name()}\n")
+        else:
+            f.write(f"CPU threads: {args.cpu_threads}\n")
         f.write(f"Offline: {args.offline}\n")
         f.write(f"Comp unaware: {args.comp_unaware}\n")
 
@@ -77,8 +79,118 @@ def export_params(args):
         f.write(f"Verbose: {args.verbose}\n")
 
 
-if __name__ == "__main__":
+def process_file(audio_path, args, online, processing_times):
+    min_chunk = args.min_chunk_size
+    SAMPLING_RATE = 16000
 
+    duration = len(whisper_online.load_audio(audio_path))/SAMPLING_RATE
+
+    logger.info(f"Processing {audio_path} (duration is {duration:.2f}s)")
+
+    beg = args.start_at
+    start = time.time()-beg
+
+    processing_times[audio_path] = {'max_vram': -1,'segment_duration' : [], 'segment_timestamps': [], 'segment_processing_time': []}
+    if args.offline: ## offline mode processing (for testing/debugging)
+        start_time = time.time()
+        a = whisper_online.load_audio(audio_path)
+        online.insert_audio_chunk(a)
+        try:
+            o = online.process_iter()
+            end_time = time.time()
+        except AssertionError:
+            logger.info("assertion error")
+            pass
+        else:
+            whisper_online.output_transcript(o, start)
+        processing_times[audio_path]['segment_duration'].append(duration)
+        processing_times[audio_path]['segment_timestamps'].append((0,duration))
+        processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
+        logger.info(f"Finished processing {audio_path} in {end_time-start_time:.2f}s")
+        now = None
+    elif args.comp_unaware:  # computational unaware mode 
+        end = beg + min_chunk
+        with tqdm(total=duration) as pbar:
+            while True:
+                start_time = time.time()
+                a = whisper_online.load_audio_chunk(audio_path,beg,end)
+                online.insert_audio_chunk(a)
+                try:
+                    o = online.process_iter()
+                    end_time = time.time()
+                except AssertionError:
+                    logger.info("assertion error")
+                    pass
+                else:
+                    whisper_online.output_transcript(o, start, now=end)
+                logger.debug(f"## last processed {end:.2f}s")
+                processing_times[audio_path]['segment_duration'].append(end-beg)
+                processing_times[audio_path]['segment_timestamps'].append((beg,end))
+                processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
+                if end >= duration:
+                    pbar.n = round(duration,3)
+                    pbar.refresh()
+                    break
+                pbar.n = round(end,3)
+                pbar.refresh()
+                beg = end
+                if end + min_chunk > duration:
+                    end = duration
+                else:
+                    end += min_chunk
+            now = duration
+    
+    else: # online = simultaneous mode
+        processing_times[audio_path]['segment_latency'] = []
+        end = 0
+        with tqdm(total=duration) as pbar:
+            while True:
+                now = time.time() - start
+                if now < end+min_chunk:
+                    time.sleep(min_chunk+end-now)
+                end = time.time() - start
+
+                start_time = time.time()
+                a = whisper_online.load_audio_chunk(audio_path,beg,end)
+                
+                online.insert_audio_chunk(a)
+                processing_times[audio_path]['segment_duration'].append(len(online.audio_buffer)/online.SAMPLING_RATE)
+                processing_times[audio_path]['segment_timestamps'].append((online.buffer_time_offset,online.buffer_time_offset+len(online.audio_buffer)/online.SAMPLING_RATE))
+                try:
+                    o = online.process_iter()
+                    end_time = time.time()
+
+                except AssertionError:
+                    logger.info("assertion error")
+                    pass
+                else:
+                    whisper_online.output_transcript(o,start)
+                
+                now = time.time() - start
+                processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
+                processing_times[audio_path]['segment_latency'].append(now-end)
+                logger.debug(f"## last processed {end:.2f} s, now is {now:.2f}, the latency is {now-end:.2f}")
+                pbar.n = round(end,3)
+                pbar.refresh()
+                beg = end
+                if end >= duration:
+                    break
+                
+            now = None
+
+    o = online.finish()
+    if args.device == "cuda":
+        processing_times[audio_path]['max_vram'] = vram_peak()
+        logger.info(f'Number of GPUS {os.environ["CUDA_VISIBLE_DEVICES"]}')
+        logger.info(torch.cuda.get_device_name())
+    # else:
+    #     processing_times[audio_path]['max_vram'] = ram_peak()
+    logging.getLogger(__name__).setLevel(level=logging.INFO)
+    os.makedirs(os.path.join(args.latency_path,"transcripts"),exist_ok=True)
+    whisper_online.output_transcript(o, start, now=now, logfile=os.path.join(args.latency_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt")))
+    return processing_times
+
+def init_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('audio_path', type=str, help="Filename (or folder) of 16kHz mono channel wav, on which live streaming is simulated.")
     # parser.add_argument('--folder', action="store_true", help="If set, audio_path is a folder with wav files, not a single file.")
@@ -91,11 +203,9 @@ if __name__ == "__main__":
     parser.add_argument('--latency_path', type=str, default="latency", help='Where to store the processing_times.')
     parser.add_argument('--method', type=str, default="beam-search", choices=["beam-search", "greedy"],help='Greedy or beam search decoding.')
     parser.add_argument('--verbose', default=1, help='Verbose mode.')
+    parser.add_argument('--cpu_threads', default=4, help='When running on CPU, number of threads to use.')
     parser.add_argument('--previous_text', action="store_true", default=False, help='Condition on previous text (default False).')
     args = parser.parse_args()
-
-    # reset to store stderr to different file stream, e.g. open(os.devnull,"w")
-    # logfile = sys.stderr
     if args.verbose==2:
         logging.getLogger(__name__).setLevel(level=logging.DEBUG)
         # logging.getLogger('numba').setLevel(logging.WARNING)
@@ -110,7 +220,9 @@ if __name__ == "__main__":
     if args.offline and args.comp_unaware:
         logger.error("No or one option from --offline and --comp_unaware are available, not both. Exiting.")
         sys.exit(1)
+    return args
 
+def init_processor(args):
     size = args.model
     language = args.lan
 
@@ -143,141 +255,49 @@ if __name__ == "__main__":
         logger.info(f"setting VAD filter {args.vad}")
         asr.use_vad(args.vad if args.vad!=True else None)
     
-    min_chunk = args.min_chunk_size
     if args.buffer_trimming == "sentence":
         tokenizer = whisper_online.create_tokenizer(tgt_language)
     else:
         tokenizer = None
-    online = whisper_online.OnlineASRProcessor(asr,tokenizer,logfile=logger,buffer_trimming=(args.buffer_trimming, args.buffer_trimming_sec))
+    online_processor = whisper_online.OnlineASRProcessor(asr,tokenizer,logfile=logger,buffer_trimming=(args.buffer_trimming, args.buffer_trimming_sec))
+    return online_processor
 
+def get_file_list(args):
+    SUBFOLDERS = True
+    audios_path = []
     if os.path.isdir(args.audio_path): 
-        audios_path = os.listdir(args.audio_path)
+        paths = os.listdir(args.audio_path)
+        paths = [os.path.join(args.audio_path, f) for f in paths]
+        if SUBFOLDERS:
+            sub_folders = [f for f in paths if os.path.isdir(f)]
+            audios_path = paths
+            for sub_folder in sub_folders:
+                audios_path += [os.path.join(sub_folder, f) for f in os.listdir(sub_folder)]
+        else:
+            audios_path = paths
         audios_path.sort()
-        audios_path = [os.path.join(args.audio_path, f) for f in audios_path]
+        audios_path = [f for f in audios_path if f.endswith(".wav") or f.endswith(".mp3")]
         logger.info(f"Processing files in {args.audio_path} ({len(audios_path)} files)")
     else:
         audios_path = [args.audio_path]
+    return audios_path
+
+if __name__ == "__main__":
+
+    args = init_args()
+    online_processor = init_processor(args)
+
+    audios_path = get_file_list(args)
+    # load the audio into the LRU cache before we start the timer
+    a = whisper_online.load_audio_chunk(audios_path[0],0,1)
+
+    # warm up the ASR, because the very first transcribe takes much more time than the other
+    online_processor.asr.transcribe(a)
+
     processing_times = {}
-    latencies = []
-    # tqdm loop
-    
     for audio_path in tqdm(audios_path, total=len(audios_path)):
-        if not audio_path.endswith(".wav") and not audio_path.endswith(".mp3"):
-            continue
-        SAMPLING_RATE = 16000
-        duration = len(whisper_online.load_audio(audio_path))/SAMPLING_RATE
-
-        logger.info(f"Processing {audio_path} (duration is {duration:.2f}s)")
-
-
-        # load the audio into the LRU cache before we start the timer
-        a = whisper_online.load_audio_chunk(audio_path,0,1)
-
-        # warm up the ASR, because the very first transcribe takes much more time than the other
-        asr.transcribe(a)
-
-        beg = args.start_at
-        start = time.time()-beg
-
-        processing_times[audio_path] = {'max_vram': -1,'segment_duration' : [], 'segment_timestamps': [], 'segment_processing_time': []}
-        if args.offline: ## offline mode processing (for testing/debugging)
-            start_time = time.time()
-            a = whisper_online.load_audio(audio_path)
-            online.insert_audio_chunk(a)
-            try:
-                o = online.process_iter()
-                end_time = time.time()
-            except AssertionError:
-                logger.info("assertion error")
-                pass
-            else:
-                whisper_online.output_transcript(o, start)
-            processing_times[audio_path]['segments_duration'].append(duration)
-            processing_times[audio_path]['segments_timestamps'].append((0,duration))
-            processing_times[audio_path]['segments_processing_time'].append(end_time-start_time)
-            logger.info(f"Finished processing {audio_path} in {end_time-start_time:.2f}s")
-            now = None
-        elif args.comp_unaware:  # computational unaware mode 
-            end = beg + min_chunk
-            with tqdm(total=duration) as pbar:
-                while True:
-                    start_time = time.time()
-                    a = whisper_online.load_audio_chunk(audio_path,beg,end)
-                    online.insert_audio_chunk(a)
-                    try:
-                        o = online.process_iter()
-                        end_time = time.time()
-                    except AssertionError:
-                        logger.info("assertion error")
-                        pass
-                    else:
-                        whisper_online.output_transcript(o, start, now=end)
-                    logger.debug(f"## last processed {end:.2f}s")
-                    processing_times[audio_path]['segment_duration'].append(end-beg)
-                    processing_times[audio_path]['segment_timestamps'].append((beg,end))
-                    processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
-                    if end >= duration:
-                        pbar.n = round(duration,3)
-                        pbar.refresh()
-                        break
-                    pbar.n = round(end,3)
-                    pbar.refresh()
-                    beg = end
-                    if end + min_chunk > duration:
-                        end = duration
-                    else:
-                        end += min_chunk
-                now = duration
-        
-        else: # online = simultaneous mode
-            processing_times[audio_path]['segment_latency'] = []
-            end = 0
-            with tqdm(total=duration) as pbar:
-                while True:
-                    now = time.time() - start
-                    if now < end+min_chunk:
-                        time.sleep(min_chunk+end-now)
-                    end = time.time() - start
-
-                    start_time = time.time()
-                    a = whisper_online.load_audio_chunk(audio_path,beg,end)
-                    
-                    online.insert_audio_chunk(a)
-                    processing_times[audio_path]['segment_duration'].append(len(online.audio_buffer)/online.SAMPLING_RATE)
-                    processing_times[audio_path]['segment_timestamps'].append((online.buffer_time_offset,online.buffer_time_offset+len(online.audio_buffer)/online.SAMPLING_RATE))
-                    try:
-                        o = online.process_iter()
-                        end_time = time.time()
-
-                    except AssertionError:
-                        logger.info("assertion error")
-                        pass
-                    else:
-                        whisper_online.output_transcript(o,start)
-                    
-                    now = time.time() - start
-                    processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
-                    processing_times[audio_path]['segment_latency'].append(now-end)
-                    logger.debug(f"## last processed {end:.2f} s, now is {now:.2f}, the latency is {now-end:.2f}")
-                    pbar.n = round(end,3)
-                    pbar.refresh()
-                    beg = end
-                    if end >= duration:
-                        break
-                    
-                now = None
-
-        o = online.finish()
-        if args.device == "cuda":
-            processing_times[audio_path]['max_vram'] = vram_peak()
-            logger.info(f'Number of GPUS {os.environ["CUDA_VISIBLE_DEVICES"]}')
-            logger.info(torch.cuda.get_device_name())
-        # else:
-        #     processing_times[audio_path]['max_vram'] = ram_peak()
-        logging.getLogger(__name__).setLevel(level=logging.INFO)
-        os.makedirs(os.path.join(args.latency_path,"transcripts"),exist_ok=True)
-        whisper_online.output_transcript(o, start, now=now, logfile=os.path.join(args.latency_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt")))
-        
+        processing_times = process_file(audio_path, args, online_processor, processing_times)
+                
     export_processing_times(args, processing_times)
     export_params(args)
 

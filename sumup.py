@@ -27,10 +27,10 @@ def search_row(data, hardware, device, backend, compute_type, vad, method):
             return row
     return None
 
-def search_rows(data, hardware=None, device=None, backend=None, compute_type=None, vad=None, method=None):
+def search_rows(data, hardware=None, device=None, backend=None, compute_type=None, vad=None, method=None, condition_on_previous_text=None, data_type=None):
     rows = []
     for row in data:
-        if (hardware is None or row['hardware'] == hardware) and (device is None or row['device'] == device) and (backend is None or row['backend'] == backend) and (compute_type is None or row['compute_type'] == compute_type) and (vad is None or row['vad'] == vad) and (method is None or row['method'] == method):
+        if (hardware is None or row['hardware'] == hardware) and (data_type is None or row['data_type']==data_type) and (condition_on_previous_text is None or row['condition_on_previous_text']==condition_on_previous_text) and (device is None or row['device'] == device) and (backend is None or row['backend'] == backend) and (compute_type is None or row['compute_type'] == compute_type or (compute_type=="best" and row['compute_type']=="int8" and row['backend']=="faster") or (compute_type=="best" and row['compute_type']=="float32" and row['backend']=="timestamped")) and (vad is None or row['vad'] == vad) and (method is None or row['method'] == method):
             rows.append(row)
     return rows
 
@@ -68,7 +68,7 @@ def plot_processting_times_of_files(row, output_path='plots'):
     plt.savefig(os.path.join(output_path,'processing_time_per_file.png'))
     plt.close()
 
-def get_values(row, key='segment_latency', mode='all'):
+def get_values(row, key='segment_latency', mode='max'):
     data_names = row['data'].keys()
     values= []
     for j in data_names:
@@ -88,23 +88,28 @@ def plot(data):
     # plot_processting_times_per_params(data_gpu, "GPU processing times", output_path='plots/gpu')
     # data_cpu = search_rows(data, 'device', 'cpu')
     # plot_processting_times_per_params(data_cpu, "CPU processing times" ,output_path='plots/cpu')
-    plot_param(data_gpu, title="Latency depending on precision on 1080TI (GPU) for faster-whisper", key='segment_latency', output_path='plots/gpu/faster', hardware="koios", device="gpu", backend="faster", method="greedy", vad='NoVAD')
-    plot_param(data_gpu, title="Latency depending on precision on 1080TI (GPU) for whisper-timestamped", key='segment_latency',output_path='plots/gpu/timestamped', hardware="koios", device="gpu", backend="timestamped", method="greedy", vad='NoVAD')
-    plot_param(data_gpu, title="VRAM usage depending on precision on 1080TI (GPU) for faster-whisper", key='max_vram',output_path='plots/gpu/faster', hardware="koios", device="gpu", backend="faster", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", data_mode='max')
-    plot_param(data_gpu, title="VRAM usage depending on precision on 1080TI (GPU) for whisper-timestamped", key='max_vram',output_path='plots/gpu/timestamped', hardware="koios", device="gpu", backend="timestamped", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", data_mode='max')
-    plot_param(data_gpu, title="Latency depending on VAD on 1080TI (GPU)", key='segment_latency', output_path='plots/gpu', hardware="koios", device="gpu", method="greedy", compute_type="float32")
-    plot_param(data_gpu, title="Latency depending on VAD on 1080TI (GPU) for faster-whisper", key='segment_latency', output_path='plots/gpu/faster', hardware="koios", device="gpu", backend="faster", method="greedy")
+    plot_param(data_gpu, title="Latency depending on precision on 1080TI (GPU) for faster-whisper", key='segment_latency', output_path='plots/gpu/faster', hardware="koios", device="gpu", backend="faster", method="greedy", vad='NoVAD', condition_on_previous_text="NoCondition", data_type="speech")
+    plot_param(data_gpu, title="Latency depending on precision on 1080TI (GPU) for whisper-timestamped", key='segment_latency',output_path='plots/gpu/timestamped', hardware="koios", device="gpu", backend="timestamped", method="greedy", vad='NoVAD', condition_on_previous_text="NoCondition", data_type="speech")
+    plot_param(data_gpu, title="VRAM usage depending on precision on 1080TI (GPU) for faster-whisper", key='max_vram',output_path='plots/gpu/faster', hardware="koios", device="gpu", backend="faster", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", plot_data_mode='max', condition_on_previous_text="NoCondition", data_type="speech")
+    plot_param(data_gpu, title="VRAM usage depending on precision on 1080TI (GPU) for whisper-timestamped", key='max_vram',output_path='plots/gpu/timestamped', hardware="koios", device="gpu", backend="timestamped", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", plot_data_mode='max', condition_on_previous_text="NoCondition", data_type="speech")
+    plot_param(data_gpu, title="Latency depending on VAD on 1080TI (GPU)", key='segment_latency', output_path='plots/gpu', hardware="koios", device="gpu", method="greedy", compute_type="float32", condition_on_previous_text="NoCondition", data_type="speech")
+    plot_param(data_gpu, title="Latency depending on VAD on 1080TI (GPU) for faster-whisper", key='segment_latency', output_path='plots/gpu/faster', hardware="koios", device="gpu", backend="faster", method="greedy", condition_on_previous_text="NoCondition", data_type="speech")
+    plot_param(data_gpu, title="Latency depending on method on 1080TI (GPU)", key='segment_latency', output_path='plots/gpu', hardware="koios", device="gpu", vad='VAD', compute_type="best", condition_on_previous_text="NoCondition", data_type="speech")
+    plot_param(data_gpu, title="Latency depending on method on 1080TI (GPU) for faster-whisper", key='segment_latency', output_path='plots/gpu/faster', hardware="koios", device="gpu", backend="faster", compute_type="best", condition_on_previous_text="NoCondition", data_type="speech")
+    plot_param(data_gpu, title="Latency depending on VAD for silence data on 1080TI (GPU)", key='segment_latency', output_path='plots/gpu', hardware="koios", device="gpu", method="greedy", compute_type="float32", condition_on_previous_text="NoCondition", data_type="silence")
+    plot_param(data_gpu, title="Latency depending on VAD for silence data on 1080TI (GPU) for faster-whisper", key='segment_latency', output_path='plots/gpu/faster', hardware="koios", device="gpu", backend="faster", method="greedy", condition_on_previous_text="NoCondition", data_type="silence")
+    
 
     data_cpu = search_rows_by_key(data, 'device', 'cpu')
-    plot_param(data_cpu, title="Latency depending on precision on CPU for faster-whisper", key='segment_latency', output_path='plots/cpu/faster', hardware="koios", device="cpu", backend="faster", method="greedy", vad='NoVAD')
-    plot_param(data_cpu, title="Latency depending on precision on CPU for whisper-timestamped", key='segment_latency',output_path='plots/cpu/timestamped', hardware="koios", device="cpu", backend="timestamped", method="greedy", vad='NoVAD')
-    plot_param(data_cpu, title="RAM usage depending on precision on CPU for faster-whisper", key='max_vram',output_path='plots/cpu/faster', hardware="koios", device="cpu", backend="faster", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", data_mode='max')
-    plot_param(data_cpu, title="RAM usage depending on precision on CPU for whisper-timestamped", key='max_vram',output_path='plots/cpu/timestamped', hardware="koios", device="cpu", backend="timestamped", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", data_mode='max')
-    plot_param(data_cpu, title="Latency depending on VAD on CPU", key='segment_latency', output_path='plots/cpu', hardware="koios", device="cpu", method="greedy", compute_type="float32")
-    plot_param(data_cpu, title="Latency depending on VAD on CPU for faster-whisper", key='segment_latency', output_path='plots/cpu/faster', hardware="koios", device="cpu", backend="faster", method="greedy")
+    plot_param(data_cpu, title="Latency depending on precision on CPU for faster-whisper", key='segment_latency', output_path='plots/cpu/faster', hardware="koios", device="cpu", backend="faster", method="greedy", vad='NoVAD', data_type="speech")
+    plot_param(data_cpu, title="Latency depending on precision on CPU for whisper-timestamped", key='segment_latency',output_path='plots/cpu/timestamped', hardware="koios", device="cpu", backend="timestamped", method="greedy", vad='NoVAD', data_type="speech")
+    plot_param(data_cpu, title="RAM usage depending on precision on CPU for faster-whisper", key='max_vram',output_path='plots/cpu/faster', hardware="koios", device="cpu", backend="faster", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", plot_data_mode='max', data_type="speech")
+    plot_param(data_cpu, title="RAM usage depending on precision on CPU for whisper-timestamped", key='max_vram',output_path='plots/cpu/timestamped', hardware="koios", device="cpu", backend="timestamped", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", plot_data_mode='max', data_type="speech")
+    plot_param(data_cpu, title="Latency depending on VAD on CPU", key='segment_latency', output_path='plots/cpu', hardware="koios", device="cpu", method="greedy", compute_type="float32", data_type="speech")
+    plot_param(data_cpu, title="Latency depending on VAD on CPU for faster-whisper", key='segment_latency', output_path='plots/cpu/faster', hardware="koios", device="cpu", backend="faster", method="greedy", data_type="speech")
 
 
-def plot_param(data, title="Latency", key='segment_latency', output_path='plots', ylabel='Latency [s]', data_mode='all', hardware=None, device=None, backend=None, compute_type=None, method=None, vad=None):
+def plot_param(data, title="Latency", key='segment_latency', output_path='plots', ylabel='Latency [s]', plot_data_mode='all', hardware=None, device=None, backend=None, compute_type=None, method=None, vad=None, condition_on_previous_text=None, data_type=None):
     os.makedirs(output_path, exist_ok=True)
     description = [f"hardware: {hardware}" if hardware is not None else ""]
     description.append(f"device: {device}" if device is not None else "")
@@ -112,35 +117,37 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
     description.append(f"compute_type: {compute_type}" if compute_type is not None else "")
     description.append(f"method: {method}" if method is not None else "")
     description.append(f"vad: {vad}" if vad is not None else "")
+    description.append(f"data_type: {data_type}" if data_type is not None else "")
+    if condition_on_previous_text is not None:
+        description.append(f"condition_on_previous_text: False" if condition_on_previous_text=="NoCondition" else "condition_on_previous_text: True")
     description = [x for x in description if x != ""]
     if len(description) > 4:
-        description[2] = "\n" + description[2]
+        description[3] = "\n" + description[3]
     description = ', '.join(description)
     # plt.rcParams["figure.figsize"] = (12,10)
-    data = search_rows(data, hardware=hardware, device=device, backend=backend, compute_type=compute_type, method=method, vad=vad)
+    data = search_rows(data, hardware=hardware, device=device, backend=backend, compute_type=compute_type, method=method, vad=vad, condition_on_previous_text=condition_on_previous_text, data_type=data_type)
     if len(data) == 0:
         print(f"No data for {description}")
         return
-    # data = sorted(data, key=lambda x: x['compute_type'])
     fig, ax = plt.subplots()    
     plot_values= []
     plot_names = []
     for row in data:
-        m = get_values(row, key=key, mode=data_mode)
+        m = get_values(row, key=key, mode=plot_data_mode)
         plot_values.append(m)
         name = f"{row['backend']}_" if backend is None else "" 
         name += f"{row['compute_type']}_" if compute_type is None else ""
         name += f"{row['method']}_" if method is None else ""
         name += f"{row['vad']}_" if vad is None else ""
+        name += f"{row['condition_on_previous_text']}" if condition_on_previous_text is None else ""
+        name += f"{row['data_type']}" if data_type is None else ""
         name = name[:-1]
-        # print(row['vad'])
-        # print(name)
         plot_names.append(name)
-    if data_mode == 'all':
+    if plot_data_mode == 'all':
         ax.violinplot(plot_values, showmedians=True, quantiles=[[0.25, 0.75] for i in range(len(plot_values))], showextrema=False)
         ax.set_xticks([y + 1 for y in range(len(plot_names))], labels=plot_names)
 
-    elif data_mode == 'max':
+    elif plot_data_mode == 'max':
         ax.bar(plot_names, plot_values)
         plt.ylim([0, max(plot_values)*1.1])
         ax.set_xticks([y for y in range(len(plot_names))], labels=plot_names)
@@ -155,6 +162,14 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
     # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     plt.savefig(os.path.join(output_path,f'{title}.png'), bbox_inches='tight')
     plt.close()
+
+def get_ram_value(path):
+    with open(os.path.join(path, "ram.txt"), 'r') as f:
+        line = f.readline()
+        line = line.split(": ")[1]
+        line = line.split(" ")[0]
+        ram_value = int(line) / 1000
+    return ram_value
 
 def load_data(data_path):
     hardwares  = os.listdir(data_path)
@@ -172,11 +187,15 @@ def load_data(data_path):
                 data_types = ["silence" if "silence" in x else "speech" for x in params]
                 vads = ["VAD" if "vad" in x else "NoVAD" for x in params]
                 methods = ["beam_search" if "beam" in x  else "greedy" for x in params]
+                condition_on_previous_text = ["ConditionOnPreviousText" if "previous-text" in x else "NoCondition" for x in params]
                 for i, exec in enumerate(execs):
                     if os.path.exists(os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'result.json')):
                         with open(os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'result.json'), 'r') as f:
                             raw_data = json.load(f)
-                            data.append({'hardware': hardware,'device': device, 'data_type':data_types[i], 'backend': backend, 'compute_type': compute_types[i], 'vad': vads[i], 'method': methods[i], 
+                            if device == "cpu":
+                                for j in raw_data.keys():
+                                    raw_data[j]['max_vram'] = get_ram_value(os.path.join(data_path, hardware, device, backend, exec.split('.')[0]))
+                            data.append({'hardware': hardware,'device': device, 'data_type':data_types[i], 'condition_on_previous_text': condition_on_previous_text[i], 'backend': backend, 'compute_type': compute_types[i], 'vad': vads[i], 'method': methods[i], 
                                             'data': raw_data})
                     else:
                         print(f"Missing result.json for {os.path.join(data_path, hardware, device, backend, exec.split('.')[0])}")
