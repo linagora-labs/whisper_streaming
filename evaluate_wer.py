@@ -1,6 +1,10 @@
 import os
 import argparse
 
+ground_truth_source_file = "/media/nas/CORPUS_PENDING/kaldi/Corpus_FR/normalized/ACSYNT/text"
+ground_truth_folder = "../ground_truths"
+os.makedirs(ground_truth_folder, exist_ok=True)
+
 def load_data(data_path):
     hardwares  = os.listdir(data_path)
     files = {}
@@ -19,19 +23,21 @@ def load_data(data_path):
                         if files.get(k) is None:
                             files[k] = {}
                         files[k][backend+'_'+exec] = os.path.join(transcripts_folder_path, k)
-    ground_truths_file = "/media/nas/CORPUS_PENDING/kaldi/Corpus_FR/normalized/ACSYNT/text"
-    with open(ground_truths_file, 'r') as f:
-        lines = f.readlines()
-        for line in lines:
-            line = line.strip()
-            id = line.split(' ')[0]
-            id = id.split('_')[0]
-            if files.get(id) is None:
-                continue
-            if files[id].get('ground_truth') is None:
-                files[id]['ground_truth'] = line.split(' ', 1)[1]
-            else:
-                files[id]['ground_truth'] += ' ' + line.split(' ', 1)[1]
+    ground_truth_file_paths = os.listdir(ground_truth_folder)
+    for i in files.keys():
+        if i+".txt" not in ground_truth_file_paths:
+            print(i)
+            get_truth_from_source(ground_truth_source_file, files.keys())
+            break
+    ground_truth_files = os.listdir(ground_truth_folder)
+    ground_truth_files = [x.split('.')[0] for x in ground_truth_files]
+    for i in ground_truth_files:
+        if files.get(i) is None:
+            continue
+        with open(os.path.join(ground_truth_folder, i+'.txt'), 'r') as f:
+            lines = f.readlines()
+            txt = ' '.join(lines)
+        files[i]['ground_truth'] = txt
     return files
 
 
@@ -50,6 +56,25 @@ def load_prediction(file_path):
 def process_wer(ref, hyp):
     pred=load_prediction(hyp)
     
+
+def get_truth_from_source(source, files):
+    truth_files = []
+    with open(source, 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            line = line.strip()
+            id = line.split(' ')[0]
+            id = id.split('_')[0]
+            if id not in files:
+                continue
+            else:
+                if id in truth_files:
+                    with open(os.path.join(ground_truth_folder, id+'.txt'), 'a') as f:
+                        f.write(' ' + line.split(' ', 1)[1])
+                else:
+                    with open(os.path.join(ground_truth_folder, id+'.txt'), 'w') as f:
+                        f.write(line.split(' ', 1)[1])
+                    truth_files.append(id)
 
 if __name__ == '__main__':
 
