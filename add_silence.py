@@ -5,11 +5,12 @@ import random
 
 input_dir = "/home/abert/abert/data-fr/normal"
 output_dir = "/home/abert/abert/data-fr/silence"
+os.makedirs(output_dir, exist_ok=True)
 
 if __name__=="__main__":
     # copy all files from input_dir to output_dir
     for file in os.listdir(input_dir):
-        if file.endswith(".wav"):
+        if file.endswith(".wav") or file.endswith(".wav") or file.endswith("flac"):
             number_of_silences = 3
             sound = AudioSegment.from_wav(os.path.join(input_dir, file))
             for i in range(number_of_silences):
