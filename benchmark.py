@@ -277,7 +277,7 @@ def get_file_list(args):
         else:
             audios_path = paths
         audios_path.sort()
-        audios_path = [f for f in audios_path if f.endswith(".wav") or f.endswith(".mp3")]
+        audios_path = [f for f in audios_path if f.endswith(".wav") or f.endswith(".mp3") or f.endswith(".flac")]
         logger.info(f"Processing files in {args.audio_path} ({len(audios_path)} files)")
     else:
         audios_path = [args.audio_path]

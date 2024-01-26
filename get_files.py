@@ -43,7 +43,10 @@ def get_files_from_segments(kaldi_path, files_path_to_get, output_dir):
         annot = ' '.join(text)
         annot = annot.replace('  ', ' ')
         base_file_name = os.path.basename(x)
-        with open(os.path.join(output_dir, base_file_name.replace('.wav', '.txt')), 'w') as f:
+        annot_file = os.path.join(output_dir, base_file_name.replace('.wav', '.txt'))
+        annot_file = os.path.join(output_dir, annot_file.replace('.flac', '.txt'))
+        annot_file = os.path.join(output_dir, annot_file.replace('.mp3', '.txt'))
+        with open(annot_file, 'w') as f:
             f.write(annot)
         audio = load_audio(x, start=0, end=end_time, sample_rate=16000)
         save_audio(os.path.join(output_dir, base_file_name), audio, 16000)

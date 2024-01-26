@@ -19,11 +19,11 @@ mkdir -p $path_gpu_tw
 
 
 # Test offline VS streaming
-time python benchmark.py $data --model $size --language $language --task transcribe --offline --backend faster-whisper --min-chunk-size $min_chunk_size --method beam-search --vad --latency_path $path_gpu_fw/int8_beam_vad_offline
-time python benchmark.py $data --model $size --language $language --task transcribe --offline --backend whisper_timestamped --min-chunk-size $min_chunk_size --method beam-search --vad --latency_path $path_gpu_tw/float32_beam_vad_offline
+time python benchmark.py $data --model $size --language $language --task transcribe --offline --backend faster-whisper --min-chunk-size $min_chunk_size --method beam-search --vad --sub_folders --latency_path $path_gpu_fw/int8_beam_vad_offline
+time python benchmark.py $data --model $size --language $language --task transcribe --offline --backend whisper_timestamped --min-chunk-size $min_chunk_size --method beam-search --vad --sub_folders --latency_path $path_gpu_tw/float32_beam_vad_offline
 
-time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method beam-search --vad --latency_path $path_gpu_fw/int8_beam_vad
-time python benchmark.py $data --model $size --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method beam-search --vad --latency_path $path_gpu_tw/float32_beam_vad
+time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method beam-search --vad --sub_folders --latency_path $path_gpu_fw/int8_beam_vad
+time python benchmark.py $data --model $size --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method beam-search --vad --sub_folders --latency_path $path_gpu_tw/float32_beam_vad
 
 # Test method
 
@@ -32,9 +32,9 @@ time python benchmark.py $data --model $size --language $language --task transcr
 
 # Test model size
 
-time python benchmark.py $data --model medium --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method beam-search --vad --latency_path $path_gpu_fw/int8_beam_vad
-time python benchmark.py $data --model medium --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method beam-search --vad --latency_path $path_gpu_tw/float32_beam_vad
+time python benchmark.py $data --model medium --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method beam-search --vad --sub_folders --latency_path $path_gpu_fw/int8_beam_vad
+time python benchmark.py $data --model medium --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method beam-search --vad --sub_folders --latency_path $path_gpu_tw/float32_beam_vad
 
 # Test vad
-time python benchmark.py $data --model medium --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method beam-search --latency_path $path_gpu_fw/int8_beam
-time python benchmark.py $data --model medium --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method beam-search --latency_path $path_gpu_tw/float32_beam
+time python benchmark.py $data --model medium --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method beam-search --sub_folders --latency_path $path_gpu_fw/int8_beam
+time python benchmark.py $data --model medium --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method beam-search --sub_folders --latency_path $path_gpu_tw/float32_beam
