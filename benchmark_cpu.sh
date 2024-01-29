@@ -9,13 +9,10 @@ FILE=$data
 f="$(basename -- $FILE)"
 f=${f%.mp3}
 path="${f}_${1}"
-path_cpu="${path}/koios/cpu"
-path_gpu="${path}/koios/gpu"
+path_cpu="${path}/biggerboi/cpu"
 
 path_cpu_fw="${path_cpu}/faster"
 path_cpu_tw="${path_cpu}/timestamped"
-path_gpu_fw="${path_gpu}/faster"
-path_gpu_tw="${path_gpu}/timestamped"
 mkdir -p $path_cpu_fw
 mkdir -p $path_cpu_tw
 

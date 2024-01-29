@@ -181,8 +181,11 @@ def process_file(audio_path, args, online, processing_times):
     o = online.finish()
     if args.device == "cuda":
         processing_times[audio_path]['max_vram'] = vram_peak()
-        logger.info(f'Number of GPUS {os.environ["CUDA_VISIBLE_DEVICES"]}')
-        logger.info(torch.cuda.get_device_name())
+        try:
+            logger.info(f'Number of GPUS: {os.environ["CUDA_VISIBLE_DEVICES"]}')
+        except KeyError:
+            pass
+        logger.info(f"GPU used: {torch.cuda.get_device_name()}")
     # else:
     #     processing_times[audio_path]['max_vram'] = ram_peak()
     logging.getLogger(__name__).setLevel(level=logging.INFO)

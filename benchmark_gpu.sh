@@ -1,6 +1,8 @@
+# export PYTHONPATH="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"
+# export PYTHONPATH="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/whisper-timestamped"
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=1
-# export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"
+export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"
 min_chunk_size=2
 data=${2:-../data-fr/normal}
 size=${3:-large-v3}
@@ -9,11 +11,8 @@ FILE=$data
 f="$(basename -- $FILE)"
 f=${f%.mp3}
 path="${f}_${1}"
-path_cpu="${path}/koios/cpu"
 path_gpu="${path}/koios/gpu"
 
-path_cpu_fw="${path_cpu}/faster"
-path_cpu_tw="${path_cpu}/timestamped"
 path_gpu_fw="${path_gpu}/faster"
 path_gpu_tw="${path_gpu}/timestamped"
 mkdir -p $path_gpu_fw
