@@ -242,7 +242,7 @@ def init_processor(args):
             model_kwargs['backend'] = "transformers"
         else:
             model_kwargs['backend'] = "openai-whisper"
-    asr = asr_cls(modelsize=size, lan=language, compute_type=args.compute_type, model_kwargs=model_kwargs)
+    asr = asr_cls(modelsize=size, lan=language, model_kwargs=model_kwargs)
 
     if args.method != "greedy":
         asr.transcribe_kargs['beam_size'] = 5

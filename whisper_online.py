@@ -29,13 +29,13 @@ class ASRBase:
     sep = " "   # join transcribe words with this character (" " for whisper_timestamped,
                 # "" for faster-whisper because it emits the spaces when needed)
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, condition_on_previous_text=None, model_kwargs=None):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr, condition_on_previous_text=None, model_kwargs=None):
         self.logfile = logfile
 
         self.transcribe_kargs = {}
         self.original_language = lan 
 
-        self.model = self.load_model(modelsize, cache_dir, model_dir, device=device, kwargs=model_kwargs)
+        self.model = self.load_model(modelsize, cache_dir, model_dir, model_kwargs=model_kwargs)
 
 
     def load_model(self, modelsize, cache_dir):
@@ -55,20 +55,20 @@ class WhisperTimestampedASR(ASRBase):
 
     sep = " "
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr, compute_type=None, condition_on_previous_text=None, model_kwargs=None):
-        super().__init__(lan, modelsize, cache_dir, model_dir, logfile, compute_type, model_kwargs)
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr, condition_on_previous_text=None, model_kwargs=None):
+        super().__init__(lan, modelsize=modelsize, cache_dir=cache_dir, model_dir=model_dir, logfile=logfile, model_kwargs=model_kwargs)
         self.transcribe_kargs["verbose"] = None
         self.transcribe_kargs["beam_size"] = None
         self.transcribe_kargs["best_of"] = None
         self.transcribe_kargs["temperature"] = 0
-        self.transcribe_kargs['condition_on_previous_text'] = False
-        if condition_on_previous_text is not None:
-            self.transcribe_kargs['condition_on_previous_text'] = condition_on_previous_text
-        if model_kwargs['compute_type'] is not None:
+        self.transcribe_kargs['condition_on_previous_text'] = False if condition_on_previous_text is None else condition_on_previous_text
+        if model_kwargs.get('compute_type', None) is not None:
             if model_kwargs['compute_type'] == "float16":
                 model_kwargs['compute_type'] = True
             else:
                 model_kwargs['compute_type'] = False
+        else:
+            model_kwargs['compute_type'] = False
         self.transcribe_kargs['fp16'] = model_kwargs['compute_type']
         model_kwargs.pop('compute_type', None)
 
@@ -76,13 +76,14 @@ class WhisperTimestampedASR(ASRBase):
     def load_model(self, modelsize=None, cache_dir=None, model_dir=None, model_kwargs=None):
         # import whisper
         from whisper_timestamped import transcribe_timestamped
+        from whisper_timestamped import load_model 
         self.transcribe_timestamped = transcribe_timestamped
         if model_dir is not None:
             logger.info("ignoring model_dir, not implemented")
-        if model_kwargs['device']=="cpu":
+        if model_kwargs.get('device', "cuda")=="cpu":
             torch.set_num_threads(model_kwargs['cpu_threads'])
-            model_kwargs.pop('cpu_threads', None)
-        return whisper_timestamped.load_model(modelsize, download_root=cache_dir, **model_kwargs)
+        model_kwargs.pop('cpu_threads', None)
+        return load_model(modelsize, download_root=cache_dir, **model_kwargs)
 
     def transcribe(self, audio, init_prompt=""):
         result = self.transcribe_timestamped(self.model,
@@ -121,14 +122,11 @@ class FasterWhisperASR(ASRBase):
     sep = ""
 
     def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr, condition_on_previous_text=None, model_kwargs=None):
-        super().__init__(lan, modelsize, cache_dir, model_dir, logfile, model_kwargs)
+        super().__init__(lan, modelsize=modelsize, cache_dir=cache_dir, model_dir=model_dir, logfile=logfile, model_kwargs=model_kwargs)
         self.transcribe_kargs['beam_size'] = 1
         self.transcribe_kargs['best_of'] = 1
         self.transcribe_kargs['temperature'] = 0
-        self.transcribe_kargs['condition_on_previous_text'] = False
-        if condition_on_previous_text is not None:
-            self.transcribe_kargs['condition_on_previous_text'] = condition_on_previous_text
-        
+        self.transcribe_kargs['condition_on_previous_text'] = False if condition_on_previous_text is None else condition_on_previous_text
 
 
     def load_model(self, modelsize=None, cache_dir=None, model_dir=None, model_kwargs=None):
@@ -140,7 +138,6 @@ class FasterWhisperASR(ASRBase):
             model_size_or_path = modelsize
         else:
             raise ValueError("modelsize or model_dir parameter must be set")
-
         if model_kwargs['device']=="cpu" and model_kwargs['compute_type']=="float16":
             model_kwargs['compute_type'] = "int8"
             logger.info("Float16 is not supported on CPU, using INT8 instead.")
@@ -496,7 +493,7 @@ def add_shared_args(parser):
     parser.add_argument('--model_dir', type=str, default=None, help="Dir where Whisper model.bin and other files are saved. This option overrides --model and --model_cache_dir parameter.")
     parser.add_argument('--lan', '--language', type=str, default='en', help="Language code for transcription, e.g. en,de,cs.")
     parser.add_argument('--task', type=str, default='transcribe', choices=["transcribe","translate"],help="Transcribe or translate.")
-    parser.add_argument('--backend', type=str, default="faster-whisper", choices=["faster-whisper", "whisper_timestamped"],help='Load only this backend for Whisper processing.')
+    parser.add_argument('--backend', type=str, default="faster-whisper", choices=["faster-whisper", "whisper_timestamped-openai", "whisper_timestamped-transformers"],help='Load only this backend for Whisper processing.')
     parser.add_argument('--vad', action='store', default=False, const=True, nargs='?', help='Use VAD = voice activity detection, with the default parameters.')
     parser.add_argument('--buffer_trimming', type=str, default="segment", choices=["sentence", "segment"],help='Buffer trimming strategy -- trim completed sentences marked with punctuation mark and detected by sentence segmenter, or the completed segments returned by Whisper. Sentence segmenter must be installed for "sentence" option.')
     parser.add_argument('--buffer_trimming_sec', type=float, default=15, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')

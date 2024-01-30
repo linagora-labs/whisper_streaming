@@ -13,7 +13,7 @@ def get_possible_params_faster_whisper(device):
                 'vads': ["", "vad"],
                 'methods': ["greedy", "beam-search"],
                 }
-    return {'precisions': ["int8", "float16", "float32"],
+    return {'precisions': ["int8", "float32"],
                 'vads': ["", "vad"],
                 'methods': ["greedy", "beam-search"],
                 }
@@ -112,6 +112,7 @@ if __name__ == '__main__':
         os.system('export CUDA_DEVICE_ORDER=PCI_BUS_ID')
         os.system('export CUDA_VISIBLE_DEVICES=1')
         os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"')
+        # os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"')
     elif hardware == "biggerboi":
         pass
     else:
@@ -122,7 +123,7 @@ if __name__ == '__main__':
     output_path = os.path.join(benchmark_folder, hardware, device)
     os.makedirs(output_path, exist_ok=True)
 
-    if not os.path.exists(CONFIG_FILE) or True:
+    if not os.path.exists(CONFIG_FILE):
         generate_test(device, CONFIG_FILE, subfolder)
     
     pbar = tqdm(total=sum(1 for line in open(CONFIG_FILE, "r") if not line.startswith("#")))
@@ -153,5 +154,7 @@ if __name__ == '__main__':
                     command += f' --previous-text'
                 if "offline" in params:
                     command += f' --offline'
+                print("Running:\n",command)
                 os.system(command)
                 pbar.update(1)
+                break
