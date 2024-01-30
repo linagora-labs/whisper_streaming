@@ -34,7 +34,7 @@ time python benchmark.py $data --model $size --language $language --task transcr
 time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method beam-search --latency_path $path_gpu_fw/int8_beam
 time python benchmark.py $data --model $size --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method beam-search --latency_path $path_gpu_tw/float32_beam
 
-# Test condition previous text
+# Test "float32"
 time python benchmark.py $data --model $size --language $language --task transcribe --backend faster-whisper --min-chunk-size $min_chunk_size --method greedy --previous_text --latency_path $path_gpu_fw/int8_greedy_previous-text
 time python benchmark.py $data --model $size --language $language --task transcribe --backend whisper_timestamped --min-chunk-size $min_chunk_size --method greedy --previous_text --latency_path $path_gpu_tw/float32_greedy_previous-text
 

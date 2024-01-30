@@ -203,12 +203,12 @@ def init_args():
     parser.add_argument('--comp_unaware', action="store_true", default=False, help='Computationally unaware simulation.')
     parser.add_argument('--device', type=str, default="cuda", choices=["cuda", "cpu"],help='Device used.')
     parser.add_argument('--compute_type', type=str, default="int8", choices=["int8", "float16", "float32", "int8_float16"], help='Computation type (int8, float16...).')
-    parser.add_argument('--latency_path', type=str, default="latency", help='Where to store the processing_times.')
+    parser.add_argument('--output_path', type=str, default="./", help='Output folder of the script.')
     parser.add_argument('--method', type=str, default="beam-search", choices=["beam-search", "greedy"],help='Greedy or beam search decoding.')
-    parser.add_argument('--verbose', default=1, help='Verbose mode.')
+    parser.add_argument('--verbose', default=1, help='Verbose mode (2=DEBUG, 1=INFO, 0=ERROR).')
     parser.add_argument('--cpu_threads', default=4, help='When running on CPU, number of threads to use.')
     parser.add_argument('--previous_text', action="store_true", default=False, help='Condition on previous text (default False).')
-    parser.add_argument('--sub_folders', action="store_true", default=False, help='Search audios in subfolders.')
+    parser.add_argument('--subfolders', action="store_true", default=False, help='Search for audios in subfolders (default False).')
     args = parser.parse_args()
     if args.verbose==2:
         logging.getLogger(__name__).setLevel(level=logging.DEBUG)
@@ -233,12 +233,16 @@ def init_processor(args):
     t = time.time()
     logger.info(f"Loading Whisper {size} model for {language}...")
 
+    model_kwargs = {'device': args.device, 'cpu_threads': args.cpu_threads}
     if args.backend == "faster-whisper":
         asr_cls = whisper_online.FasterWhisperASR
     else:
         asr_cls = whisper_online.WhisperTimestampedASR
-
-    asr = asr_cls(modelsize=size, lan=language, cache_dir=args.model_cache_dir, model_dir=args.model_dir, device=args.device, compute_type=args.compute_type)
+        if args.backend == "whisper_timestamped-transformers":
+            model_kwargs['backend'] = "transformers"
+        else:
+            model_kwargs['backend'] = "openai-whisper"
+    asr = asr_cls(modelsize=size, lan=language, compute_type=args.compute_type, model_kwargs=model_kwargs)
 
     if args.method != "greedy":
         asr.transcribe_kargs['beam_size'] = 5
@@ -267,7 +271,7 @@ def init_processor(args):
     return online_processor
 
 def get_file_list(args):
-    SUBFOLDERS = args.sub_folders
+    SUBFOLDERS = args.subfolders
     audios_path = []
     if os.path.isdir(args.audio_path): 
         paths = os.listdir(args.audio_path)

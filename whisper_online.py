@@ -27,15 +27,15 @@ def load_audio_chunk(fname, beg, end):
 class ASRBase:
 
     sep = " "   # join transcribe words with this character (" " for whisper_timestamped,
-                # "" for faster-whisper because it emits the spaces when neeeded)
+                # "" for faster-whisper because it emits the spaces when needed)
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None, condition_on_previous_text=None, cpu_threads=4):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, condition_on_previous_text=None, model_kwargs=None):
         self.logfile = logfile
 
         self.transcribe_kargs = {}
         self.original_language = lan 
 
-        self.model = self.load_model(modelsize, cache_dir, model_dir, device=device)
+        self.model = self.load_model(modelsize, cache_dir, model_dir, device=device, kwargs=model_kwargs)
 
 
     def load_model(self, modelsize, cache_dir):
@@ -55,8 +55,8 @@ class WhisperTimestampedASR(ASRBase):
 
     sep = " "
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type=None, condition_on_previous_text=None, cpu_threads=4):
-        super().__init__(lan, modelsize, cache_dir, model_dir, device, logfile, compute_type)
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr, compute_type=None, condition_on_previous_text=None, model_kwargs=None):
+        super().__init__(lan, modelsize, cache_dir, model_dir, logfile, compute_type, model_kwargs)
         self.transcribe_kargs["verbose"] = None
         self.transcribe_kargs["beam_size"] = None
         self.transcribe_kargs["best_of"] = None
@@ -64,23 +64,25 @@ class WhisperTimestampedASR(ASRBase):
         self.transcribe_kargs['condition_on_previous_text'] = False
         if condition_on_previous_text is not None:
             self.transcribe_kargs['condition_on_previous_text'] = condition_on_previous_text
-        if compute_type is not None:
-            if compute_type == "float16":
-                compute_type = True
+        if model_kwargs['compute_type'] is not None:
+            if model_kwargs['compute_type'] == "float16":
+                model_kwargs['compute_type'] = True
             else:
-                compute_type = False
-        if device == "cpu":
-            torch.set_num_threads(cpu_threads)
-        self.transcribe_kargs['fp16'] = compute_type
+                model_kwargs['compute_type'] = False
+        self.transcribe_kargs['fp16'] = model_kwargs['compute_type']
+        model_kwargs.pop('compute_type', None)
 
 
-    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda"):
-        import whisper
+    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, model_kwargs=None):
+        # import whisper
         from whisper_timestamped import transcribe_timestamped
         self.transcribe_timestamped = transcribe_timestamped
         if model_dir is not None:
             logger.info("ignoring model_dir, not implemented")
-        return whisper.load_model(modelsize, download_root=cache_dir, device=device)
+        if model_kwargs['device']=="cpu":
+            torch.set_num_threads(model_kwargs['cpu_threads'])
+            model_kwargs.pop('cpu_threads', None)
+        return whisper_timestamped.load_model(modelsize, download_root=cache_dir, **model_kwargs)
 
     def transcribe(self, audio, init_prompt=""):
         result = self.transcribe_timestamped(self.model,
@@ -118,10 +120,8 @@ class FasterWhisperASR(ASRBase):
 
     sep = ""
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, device="cuda", logfile=sys.stderr, compute_type="int8", condition_on_previous_text=None, cpu_threads=4):
-        self.compute_type = compute_type
-        self.cpu_threads = cpu_threads
-        super().__init__(lan, modelsize, cache_dir, model_dir, device, logfile, compute_type)
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr, condition_on_previous_text=None, model_kwargs=None):
+        super().__init__(lan, modelsize, cache_dir, model_dir, logfile, model_kwargs)
         self.transcribe_kargs['beam_size'] = 1
         self.transcribe_kargs['best_of'] = 1
         self.transcribe_kargs['temperature'] = 0
@@ -131,7 +131,7 @@ class FasterWhisperASR(ASRBase):
         
 
 
-    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, device="cuda"):
+    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, model_kwargs=None):
         from faster_whisper import WhisperModel
         if model_dir is not None:
             logger.info(f"Loading whisper model from model_dir {model_dir}. modelsize and cache_dir parameters are not used.")
@@ -141,9 +141,10 @@ class FasterWhisperASR(ASRBase):
         else:
             raise ValueError("modelsize or model_dir parameter must be set")
 
-        if device=="cpu" and self.compute_type=="float16":
-            self.compute_type = "int8"
-        model = WhisperModel(model_size_or_path, device=device, compute_type=self.compute_type, download_root=cache_dir, cpu_threads=self.cpu_threads)
+        if model_kwargs['device']=="cpu" and model_kwargs['compute_type']=="float16":
+            model_kwargs['compute_type'] = "int8"
+            logger.info("Float16 is not supported on CPU, using INT8 instead.")
+        model = WhisperModel(model_size_or_path, download_root=cache_dir, **model_kwargs)
 
         # if device == "cuda":
         #     # this worked fast and reliably on NVIDIA L40
