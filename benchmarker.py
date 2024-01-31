@@ -80,9 +80,9 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False):
                         if (backend == "faster-whisper" and is_params_valid_faster(device,precision, vad, method, subfolders)) or (backend.startswith("whisper-timestamped") and is_params_valid_whisper_timestamped(device, precision, vad, method, subfolders)):
                             f.write(f'{backend}_{test_id}\n')
                             if device=='cpu' and ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
-                                f.write(f'{backend}_{test_id}_cputhreads-2t\n')
-                                f.write(f'{backend}_{test_id}_cputhreads-8t\n')
-                                f.write(f'{backend}_{test_id}_cputhreads-16t\n')
+                                f.write(f'{backend}_{test_id}_2t\n')
+                                f.write(f'{backend}_{test_id}_8t\n')
+                                f.write(f'{backend}_{test_id}_16t\n')
                             if device=="cuda" and ((backend.startswith("whisper_timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
                                 f.write(f'{backend}_{test_id}_previous-text\n')
                             if not subfolders:
@@ -102,6 +102,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_silence', type=str, default='../data-fr/silence')
     parser.add_argument('--subfolders', type=bool, default=False)
     parser.add_argument('--model_size', type=str, default='large-v3')
+    parser.add_argument('--force_command', type=bool, default=False)
     args = parser.parse_args()
     hardware = args.hardware
     device = args.device
@@ -140,6 +141,10 @@ if __name__ == '__main__':
                 if backend.startswith('whisper'):
                     backend = '_'.join(backend.split("-", 1))
                 sub_path = os.path.join(output_path, backend, '_'.join(params[1:]))
+                if os.path.exists(os.path.join(sub_path, "result.json")) and not args.force_command:
+                    print(f'Skipping {sub_path}')
+                    pbar.update(1)
+                    continue
                 os.makedirs(sub_path, exist_ok=True)
                 command = ""
                 if device == "cpu":
@@ -158,9 +163,9 @@ if __name__ == '__main__':
                     command += f' --previous-text'
                 if "offline" in params:
                     command += f' --offline'
-                tmp = [i for i in params if i.startswith('cputhreads')]
+                tmp = [i for i in params if i[-1]=="t" and len(i)<=3 and i[0].isdigit()]
                 if tmp:
-                    command += f' --cpu_threads {tmp[0].split("-", 1)[1]}'
+                    command += f' --cpu_threads {tmp[0][:-1]}'
                 print("Running:\n",command)
                 os.system(command)
                 pbar.update(1)
