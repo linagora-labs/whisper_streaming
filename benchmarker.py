@@ -7,28 +7,32 @@ MIN_CHUNK_SIZE = 2
 
 CONFIG_FILE = "benchmark_configs.txt"
 
-def get_possible_params_faster_whisper(device):
+def get_possible_params_faster_whisper(device, small_test):
     if device == "cpu":
         return {'precisions': ["int8", "float32"],
                 'vads': ["", "vad"],
                 'methods': ["greedy", "beam-search"],
-                }
+                } if not small_test else {'precisions': ["int8"], 'vads': ["", "vad"],
+                'methods': ["greedy"]}
     return {'precisions': ["int8", "float32"],
                 'vads': ["", "vad"],
                 'methods': ["greedy", "beam-search"],
-                }
+                } if not small_test else {'precisions': ["int8"], 'vads': ["", "vad"],
+                'methods': ["greedy"]}
 
 
-def get_possible_params_whisper_timestamped(device):
+def get_possible_params_whisper_timestamped(device, small_test):
     if device == "cpu":
         return {'precisions': ["float32"],
                 'vads': ["", "vad", "vad auditok"],
                 'methods': ["greedy", "beam-search"],
-                }
+                } if not small_test else {'precisions': ["float32"], 'vads': ["", "vad"],
+                'methods': ["greedy"]}
     return {'precisions': ["float16", "float32"],
                 'vads': ["", "vad", "vad auditok"],
                 'methods': ["greedy", "beam-search"],
-            }
+            } if not small_test else {'precisions': ["float32"], 'vads': ["", "vad"],
+                'methods': ["greedy"]}
 
 def is_params_valid_faster(device, precision, vad, method, subfolders=False):
     if device == "cpu":
@@ -64,14 +68,14 @@ def is_params_valid_whisper_timestamped(device, precision, vad, method, subfolde
                 return False
     return True
 
-def generate_test(device, file="benchmark_configs.txt", subfolders=False):
+def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_test=False):
     with open(file, "w") as f:
         backends = ["faster-whisper", "whisper-timestamped-openai"]#, "whisper-timestamped-transformers"]
         for backend in backends:
             if backend == "faster-whisper":
-                possible_params = get_possible_params_faster_whisper(device)
+                possible_params = get_possible_params_faster_whisper(device, small_test)
             else:
-                possible_params = get_possible_params_whisper_timestamped(device)
+                possible_params = get_possible_params_whisper_timestamped(device, small_test)
             for precision in possible_params['precisions']:
                 for vad in possible_params['vads']:
                     for method in possible_params['methods']:
@@ -83,14 +87,16 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False):
                             test_id += f'_{vad.replace(" ", "-")}'
                         if (backend == "faster-whisper" and is_params_valid_faster(device,precision, vad, method, subfolders)) or (backend.startswith("whisper-timestamped") and is_params_valid_whisper_timestamped(device, precision, vad, method, subfolders)):
                             f.write(f'{backend}_{test_id}\n')
-                            if device=='cpu' and ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
+                            if device=='cpu' and not small_test ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
                                 f.write(f'{backend}_{test_id}_2t\n')
                                 f.write(f'{backend}_{test_id}_8t\n')
                                 # f.write(f'{backend}_{test_id}_16t\n')
-                            if device=="cuda" and ((backend.startswith("whisper_timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
+                            if device=="cuda" and not small_test and ((backend.startswith("whisper_timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
                                 f.write(f'{backend}_{test_id}_previous-text\n')
                             if not subfolders:
                                 if method == "greedy" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")):
+                                    if small_test and vad=="":
+                                        continue
                                     f.write(f'{backend}_{test_id}_silence\n')
                             else:
                                 if method == "beam-search" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")) and vad=="vad":
@@ -107,6 +113,7 @@ if __name__ == '__main__':
     parser.add_argument('--subfolders', type=bool, default=False)
     parser.add_argument('--model_size', type=str, default='large-v3')
     parser.add_argument('--force_command', type=bool, default=False)
+    parser.add_argument('--small_test', type=bool, default=True)
     args = parser.parse_args()
     hardware = args.hardware
     device = args.device
@@ -134,8 +141,7 @@ if __name__ == '__main__':
     os.makedirs(output_path, exist_ok=True)
 
     if not os.path.exists(CONFIG_FILE):
-        generate_test(device, CONFIG_FILE, subfolder)
-    
+        generate_test(device, CONFIG_FILE, subfolder, small_test=args.small_test)
     pbar = tqdm(total=sum(1 for line in open(CONFIG_FILE, "r") if not line.startswith("#")))
     with open(CONFIG_FILE, "r") as f:
         for line in f.readlines():
