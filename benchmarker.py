@@ -32,9 +32,11 @@ def get_possible_params_whisper_timestamped(device):
 
 def is_params_valid_faster(device, precision, vad, method, subfolders=False):
     if device == "cpu":
-        if precision=="float32" and method=="beam-search":
+        if precision=="float32" and (method=="beam-search" or vad==""):
             return False
         elif precision=="float16":
+            return False
+        elif method=="beam-search" and vad=="":
             return False
         return True
     else:
@@ -51,6 +53,8 @@ def is_params_valid_whisper_timestamped(device, precision, vad, method, subfolde
     if device == "cpu":
         if precision=="float16":
             return False
+        elif method=="beam-search" and vad=="":
+            return False
         return True
     else:
         if precision=="float16" and (method=="beam-search" or vad):
@@ -62,7 +66,7 @@ def is_params_valid_whisper_timestamped(device, precision, vad, method, subfolde
 
 def generate_test(device, file="benchmark_configs.txt", subfolders=False):
     with open(file, "w") as f:
-        backends = ["faster-whisper", "whisper-timestamped-openai", "whisper-timestamped-transformers"]
+        backends = ["faster-whisper", "whisper-timestamped-openai"]#, "whisper-timestamped-transformers"]
         for backend in backends:
             if backend == "faster-whisper":
                 possible_params = get_possible_params_faster_whisper(device)
@@ -82,7 +86,7 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False):
                             if device=='cpu' and ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
                                 f.write(f'{backend}_{test_id}_2t\n')
                                 f.write(f'{backend}_{test_id}_8t\n')
-                                f.write(f'{backend}_{test_id}_16t\n')
+                                # f.write(f'{backend}_{test_id}_16t\n')
                             if device=="cuda" and ((backend.startswith("whisper_timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
                                 f.write(f'{backend}_{test_id}_previous-text\n')
                             if not subfolders:
@@ -119,12 +123,13 @@ if __name__ == '__main__':
         os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"')
         # os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"')
     elif hardware == "biggerboi":
-        pass
+        os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"')
+        os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"')
     else:
         os.system('export PYTHONPATH="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"')
         os.system('export PYTHONPATH="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/whisper-timestamped"')
 
-    benchmark_folder = f'{data.split("/")[-1]}_{model_size}'
+    benchmark_folder = f'{data.split("/")[-1]}_{model_size.split("-")[0]}'
     output_path = os.path.join(benchmark_folder, hardware, device)
     os.makedirs(output_path, exist_ok=True)
 
@@ -169,4 +174,3 @@ if __name__ == '__main__':
                 print("Running:\n",command)
                 os.system(command)
                 pbar.update(1)
-                break

@@ -17,13 +17,13 @@ from linastt.utils.monitoring import tic, toc, vram_peak, ram_peak
 
 def export_processing_times(args, processing_times):
 
-    os.makedirs(args.latency_path,exist_ok=True)
+    os.makedirs(args.output_path,exist_ok=True)
 
-    with open(os.path.join(args.latency_path,"result.json"), 'w') as fp:
+    with open(os.path.join(args.output_path,"result.json"), 'w') as fp:
         json.dump(processing_times, fp, indent=4) 
 
     
-    with open(os.path.join(args.latency_path,"result.txt"),"w") as f:
+    with open(os.path.join(args.output_path,"result.txt"),"w") as f:
         f.write(f"Processing time statistics\n")
         f.write(f"Global statistics:\n")
         f.write(f"Number of files: {len(processing_times)}\n\n")
@@ -51,7 +51,7 @@ def export_processing_times(args, processing_times):
         
 
 def export_params(args):
-    with open(os.path.join(args.latency_path,"params.txt"),"w") as f:
+    with open(os.path.join(args.output_path,"params.txt"),"w") as f:
         f.write(f"Parameters\n")
         f.write(f"Audio path: {args.audio_path}\n")
         f.write(f"Model: {args.model}\n")
@@ -70,7 +70,7 @@ def export_params(args):
         f.write(f"Buffer trimming sec: {args.buffer_trimming_sec}\n")
         f.write(f"Min chunk size: {args.min_chunk_size}\n")
     
-        f.write(f"Latency path: {args.latency_path}\n")
+        f.write(f"Output path: {args.output_path}\n")
 
         f.write(f"VAD: {args.vad}\n")
         f.write(f"Method: {args.method}\n")
@@ -189,8 +189,8 @@ def process_file(audio_path, args, online, processing_times):
     # else:
     #     processing_times[audio_path]['max_vram'] = ram_peak()
     logging.getLogger(__name__).setLevel(level=logging.INFO)
-    os.makedirs(os.path.join(args.latency_path,"transcripts"),exist_ok=True)
-    whisper_online.output_transcript(o, start, now=now, logfile=os.path.join(args.latency_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt")))
+    os.makedirs(os.path.join(args.output_path,"transcripts"),exist_ok=True)
+    whisper_online.output_transcript(o, start, now=now, logfile=os.path.join(args.output_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt")))
     return processing_times
 
 def init_args():
@@ -232,8 +232,7 @@ def init_processor(args):
 
     t = time.time()
     logger.info(f"Loading Whisper {size} model for {language}...")
-
-    model_kwargs = {'device': args.device, 'cpu_threads': args.cpu_threads}
+    model_kwargs = {'device': args.device, 'cpu_threads': args.cpu_threads, 'compute_type': args.compute_type}
     if args.backend == "faster-whisper":
         asr_cls = whisper_online.FasterWhisperASR
     else:

@@ -62,15 +62,7 @@ class WhisperTimestampedASR(ASRBase):
         self.transcribe_kargs["best_of"] = None
         self.transcribe_kargs["temperature"] = 0
         self.transcribe_kargs['condition_on_previous_text'] = False if condition_on_previous_text is None else condition_on_previous_text
-        if model_kwargs.get('compute_type', None) is not None:
-            if model_kwargs['compute_type'] == "float16":
-                model_kwargs['compute_type'] = True
-            else:
-                model_kwargs['compute_type'] = False
-        else:
-            model_kwargs['compute_type'] = False
-        self.transcribe_kargs['fp16'] = model_kwargs['compute_type']
-        model_kwargs.pop('compute_type', None)
+
 
 
     def load_model(self, modelsize=None, cache_dir=None, model_dir=None, model_kwargs=None):
@@ -83,6 +75,15 @@ class WhisperTimestampedASR(ASRBase):
         if model_kwargs.get('device', "cuda")=="cpu":
             torch.set_num_threads(model_kwargs['cpu_threads'])
         model_kwargs.pop('cpu_threads', None)
+        if model_kwargs.get('compute_type', None) is not None:
+            if model_kwargs['compute_type'] == "float16":
+                model_kwargs['compute_type'] = True
+            else:
+                model_kwargs['compute_type'] = False
+        else:
+            model_kwargs['compute_type'] = False
+        self.transcribe_kargs['fp16'] = model_kwargs['compute_type']
+        model_kwargs.pop('compute_type', None)
         return load_model(modelsize, download_root=cache_dir, **model_kwargs)
 
     def transcribe(self, audio, init_prompt=""):
@@ -138,7 +139,7 @@ class FasterWhisperASR(ASRBase):
             model_size_or_path = modelsize
         else:
             raise ValueError("modelsize or model_dir parameter must be set")
-        if model_kwargs['device']=="cpu" and model_kwargs['compute_type']=="float16":
+        if model_kwargs['device']=="cpu" and model_kwargs.get('compute_type', '') =="float16":
             model_kwargs['compute_type'] = "int8"
             logger.info("Float16 is not supported on CPU, using INT8 instead.")
         model = WhisperModel(model_size_or_path, download_root=cache_dir, **model_kwargs)
