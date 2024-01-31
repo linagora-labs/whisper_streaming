@@ -123,7 +123,7 @@ if __name__ == '__main__':
         os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"')
         # os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"')
     elif hardware == "biggerboi":
-        os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"')
+        os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"')      # don't work
         os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"')
     else:
         os.system('export PYTHONPATH="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"')
