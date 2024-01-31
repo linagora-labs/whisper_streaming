@@ -79,6 +79,10 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False):
                             test_id += f'_{vad.replace(" ", "-")}'
                         if (backend == "faster-whisper" and is_params_valid_faster(device,precision, vad, method, subfolders)) or (backend.startswith("whisper-timestamped") and is_params_valid_whisper_timestamped(device, precision, vad, method, subfolders)):
                             f.write(f'{backend}_{test_id}\n')
+                            if device=='cpu' and ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
+                                f.write(f'{backend}_{test_id}_cputhreads-2t\n')
+                                f.write(f'{backend}_{test_id}_cputhreads-8t\n')
+                                f.write(f'{backend}_{test_id}_cputhreads-16t\n')
                             if device=="cuda" and ((backend.startswith("whisper_timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
                                 f.write(f'{backend}_{test_id}_previous-text\n')
                             if not subfolders:
@@ -154,6 +158,9 @@ if __name__ == '__main__':
                     command += f' --previous-text'
                 if "offline" in params:
                     command += f' --offline'
+                tmp = [i for i in params if i.startswith('cputhreads')]
+                if tmp:
+                    command += f' --cpu_threads {tmp[0].split("-", 1)[1]}'
                 print("Running:\n",command)
                 os.system(command)
                 pbar.update(1)
