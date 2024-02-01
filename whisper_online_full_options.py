@@ -232,7 +232,7 @@ def init_processor(args):
 
     t = time.time()
     logger.info(f"Loading Whisper {size} model for {language}...")
-    model_kwargs = {'device': args.device, 'cpu_threads': args.cpu_threads, 'compute_type': args.compute_type}
+    model_kwargs = {'device': args.device, 'cpu_threads': int(args.cpu_threads), 'compute_type': args.compute_type}
     if args.backend == "faster-whisper":
         asr_cls = whisper_online.FasterWhisperASR
     else:

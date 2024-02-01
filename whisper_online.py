@@ -73,7 +73,7 @@ class WhisperTimestampedASR(ASRBase):
         if model_dir is not None:
             logger.info("ignoring model_dir, not implemented")
         if model_kwargs.get('device', "cuda")=="cpu":
-            torch.set_num_threads(model_kwargs['cpu_threads'])
+            torch.set_num_threads(int(model_kwargs['cpu_threads']))
         model_kwargs.pop('cpu_threads', None)
         if model_kwargs.get('compute_type', None) is not None:
             if model_kwargs['compute_type'] == "float16":
