@@ -190,7 +190,7 @@ def process_file(audio_path, args, online, processing_times):
     #     processing_times[audio_path]['max_vram'] = ram_peak()
     logging.getLogger(__name__).setLevel(level=logging.INFO)
     os.makedirs(os.path.join(args.output_path,"transcripts"),exist_ok=True)
-    whisper_online.output_transcript(o, start, now=now, logfile=os.path.join(args.output_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt")))
+    whisper_online.output_transcript(o, start, now=now, logfile=os.path.join(args.output_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt").replace(".flac",".txt")))
     return processing_times
 
 def init_args():

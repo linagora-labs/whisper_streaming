@@ -3,9 +3,8 @@ import argparse
 from linastt.utils.wer import compute_wer, plot_wer
 import numpy as np
 
-def load_data(data_path, ground_truth_source_file, ground_truth_folder):
+def load_data(data_path, ground_truth_folder):
     hardwares  = os.listdir(data_path)
-    files = {}
     for hardware in hardwares:
         devices = os.listdir(os.path.join(data_path, hardware))
         for device in devices:
@@ -21,16 +20,12 @@ def load_data(data_path, ground_truth_source_file, ground_truth_folder):
                         if files.get(k) is None:
                             files[k] = {}
                         files[k][backend+'_'+exec] = os.path.join(transcripts_folder_path, k)
-    ground_truth_file_paths = os.listdir(ground_truth_folder)
-    for i in files.keys():
-        if i+".txt" not in ground_truth_file_paths:
-            print(i)
-            get_truth_from_source(ground_truth_source_file, ground_truth_folder, files.keys())
-            break
+    files = {}
     ground_truth_files = os.listdir(ground_truth_folder)
     ground_truth_files = [x.split('.')[0] for x in ground_truth_files]
     for i in ground_truth_files:
         if files.get(i) is None:
+            print(f"Missing {i}")
             continue
         files[i]['ground_truth'] = os.path.join(ground_truth_folder, i + '.txt')
     return files
@@ -64,40 +59,20 @@ def process_wer(name, ref_file, pred_file, verbose=False):
     return wer_score
     
 
-def get_truth_from_source(source, target, files):
-    truth_files = []
-    with open(source, 'r') as f:
-        lines = f.readlines()
-        for line in lines:
-            line = line.strip()
-            id = line.split(' ')[0]
-            id = id.split('_')[0]
-            if id not in files:
-                continue
-            else:
-                if id in truth_files:
-                    with open(os.path.join(target, id+'.txt'), 'a') as f:
-                        f.write(' ' + line.split(' ', 1)[1])
-                else:
-                    with open(os.path.join(target, id+'.txt'), 'w') as f:
-                        f.write(line.split(' ', 1)[1])
-                    truth_files.append(id)
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path', type=str, default='../normal_wer_')
-    parser.add_argument('--source_truth_folder', type=str, default="/media/nas/CORPUS_PENDING/kaldi/Corpus_FR/normalized/ACSYNT/text")
     parser.add_argument('--truth_folder', type=str, default="../ground_truths")
     args = parser.parse_args()
 
     data_path = args.data_path
-    source_truth_folder = args.source_truth_folder
     truth_folder = args.truth_folder
 
     os.makedirs(truth_folder, exist_ok=True)
 
-    data = load_data(data_path, source_truth_folder, truth_folder)
+    data = load_data(data_path, truth_folder)
     os.makedirs('wer', exist_ok=True)
 
     config_to_test = ['faster_int8_greedy_offline']
