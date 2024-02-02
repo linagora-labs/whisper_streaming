@@ -30,34 +30,41 @@ def load_data(data_path, ground_truth_folder):
     return files
 
 
-def load_prediction(file_path):
+def load_prediction(file_path, verbose=False):
     with open(file_path+".txt", 'r') as f:
         line = f.readline()
         line = line.strip()
         if line.startswith("(None, None, '')"):
-            print(f'Empty prediction for {file_path}')
+            if verbose:
+                print(f'Empty prediction for {file_path}')
             return ''
         else:
             line = line.strip()
             pred = line.split(' ', 3)[3][1:]
     return pred
 
-def load_truth(file_path):
+def load_truth(file_path, verbose=False):
     with open(file_path, 'r') as f:
         lines = f.readlines()
         txt = ' '.join(lines)
     return txt
 
-def process_wer(name, ref_file, pred_file, verbose=False):
-    pred = load_prediction(pred_file)
-    ref = load_truth(ref_file)
+def process_wer(ref_file, pred_file, name="", verbose=False, erros=False):
+    try:
+        pred = load_prediction(pred_file, verbose=verbose)
+        ref = load_truth(ref_file, verbose=verbose)
+    except FileNotFoundError as e:
+        if erros:
+            print(e)
+        return None
     # compute wer between ref and pred
     wer_score = compute_wer([ref], [pred], normalization="fr", use_percents=True)
     if verbose:
         print(f"{name} WER: {wer_score['wer']:.2f}")
+    if wer_score['wer']>100:
+        print(f"WER > 100% for {name}")
     return wer_score
     
-
 
 if __name__ == '__main__':
 
@@ -74,14 +81,13 @@ if __name__ == '__main__':
     data = load_data(data_path, truth_folder)
     os.makedirs('wer', exist_ok=True)
 
-    config_to_test = ['faster-whisper_int8_greedy_vad']
+    config_to_test = ['faster-whisper_int8_beam-search_vad']
 
     wer_list = []
     for test in config_to_test:
         for i in data.keys():
-            wer_list.append(process_wer(i, data[i]['ground_truth'], data[i][test], verbose=False))
-
-    wer_score_list = [x['wer'] for x in wer_list]
+            wer_list.append(process_wer(data[i]['ground_truth'], data[i][test], i))
+    wer_score_list = [x['wer'] for x in wer_list if x ]
     print()
     print(f"Number of files: {len(wer_score_list)}")
     print(f"Mean WER: {sum(wer_score_list)/len(wer_score_list):.2f}%")
