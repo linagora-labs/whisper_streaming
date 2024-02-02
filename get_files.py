@@ -41,6 +41,8 @@ ACSYNT_FILES_PATH_TO_GET = ['/media/nas/CORPUS_FINAL/Corpus_audio/Corpus_FR//OTH
 '/media/nas/CORPUS_FINAL/Corpus_audio/Corpus_FR//OTHERS/ACSYNT/FinalAcsynt/meeting/LOC13_JAS/JASE4.wav',
 '/media/nas/CORPUS_FINAL/Corpus_audio/Corpus_FR//OTHERS/ACSYNT/FinalAcsynt/meeting/LOC11_GOL/GOLE7.wav',
 '/media/nas/CORPUS_FINAL/Corpus_audio/Corpus_FR//OTHERS/ACSYNT/FinalAcsynt/meeting/LOC11_GOL/GOLE10.wav', 
+# '/media/nas/CORPUS_FINAL/Corpus_audio/Corpus_FR//OTHERS/ACSYNT/FinalAcsynt/prepared_speech/LOC13_JAS/JASP1.wav',
+# '/media/nas/CORPUS_FINAL/Corpus_audio/Corpus_FR//OTHERS/ACSYNT/FinalAcsynt/story/LADT1/LADT1.wav',
 '/media/nas/CORPUS_FINAL/Corpus_audio/Corpus_FR//OTHERS/ACSYNT/FinalAcsynt/meeting/LOC4_BOA/BOAE4.wav']
 ACSYNT_TARGET = '/home/abert/abert/data-fr/normal/acsynt'
 

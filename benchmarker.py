@@ -106,7 +106,7 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
 
 def run_commands(hardware, device, data, model_size, subfolder, args):
     benchmark_folder = f'{data.split("/")[-1]}_{model_size.split("-")[0]}{"_wer" if subfolder else ""}'
-    output_path = os.path.join(benchmark_folder, hardware, device)
+    output_path = os.path.join(benchmark_folder, hardware, device if device != "cuda" else "gpu")
     os.makedirs(output_path, exist_ok=True)
     pbar = tqdm(total=sum(1 for line in open(CONFIG_FILE, "r") if not line.startswith("#")))
     with open(CONFIG_FILE, "r") as f:
