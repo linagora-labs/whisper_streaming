@@ -137,7 +137,7 @@ def run_commands(hardware, device, data, model_size, subfolder, args):
                 if tmp:
                     command += f' --{tmp[0].replace("-", " ")}'
                 if "previous-text" in params:
-                    command += f' --previous-text'
+                    command += f' --previous_text'
                 if "offline" in params:
                     command += f' --offline'
                 tmp = [i for i in params if i[-1]=="t" and len(i)<=3 and i[0].isdigit()]
