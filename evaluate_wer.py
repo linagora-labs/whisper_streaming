@@ -31,6 +31,7 @@ def load_data(data_path, ground_truth_folder):
 
 
 def load_prediction(file_path, verbose=False):
+    pred = ''
     with open(file_path+".txt", 'r') as f:
         line = f.readline()
         line = line.strip()
@@ -39,8 +40,7 @@ def load_prediction(file_path, verbose=False):
                 print(f'Empty prediction for {file_path}')
             return ''
         else:
-            line = line.strip()
-            pred = line.split(' ', 3)[3][1:]
+            pred += line.split(' ', 2)[2][1:]
     return pred
 
 def load_truth(file_path, verbose=False):
@@ -62,7 +62,7 @@ def process_wer(ref_file, pred_file, name="", verbose=False, erros=False):
     if verbose:
         print(f"{name} WER: {wer_score['wer']:.2f}")
     if wer_score['wer']>100:
-        print(f"WER > 100% for {name}")
+        print(f"WER > 100% for {name} ({wer_score['wer']:.2f})")
     return wer_score
     
 
@@ -81,12 +81,12 @@ if __name__ == '__main__':
     data = load_data(data_path, truth_folder)
     os.makedirs('wer', exist_ok=True)
 
-    config_to_test = ['faster-whisper_int8_beam-search_vad']
+    config_to_test = ['faster-whisper_int8_beam-search_vad_offline']
 
     wer_list = []
     for test in config_to_test:
         for i in data.keys():
-            wer_list.append(process_wer(data[i]['ground_truth'], data[i][test], i))
+            wer_list.append(process_wer(data[i]['ground_truth'], data[i][test], i, verbose=False))
     wer_score_list = [x['wer'] for x in wer_list if x ]
     print()
     print(f"Number of files: {len(wer_score_list)}")

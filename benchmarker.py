@@ -14,7 +14,7 @@ def get_possible_params_faster_whisper(device, small_test):
                 'methods': ["greedy", "beam-search"],
                 } if not small_test else {'precisions': ["int8"], 'vads': ["", "vad"],
                 'methods': ["greedy"]}
-    return {'precisions': ["int8", "float32"],
+    return {'precisions': ["int8", "float32", "float16", "int8_float16"],
                 'vads': ["", "vad"],
                 'methods': ["greedy", "beam-search"],
                 } if not small_test else {'precisions': ["int8"], 'vads': ["", "vad"],
@@ -44,7 +44,7 @@ def is_params_valid_faster(device, precision, vad, method, subfolders=False):
             return False
         return True
     else:
-        if precision=="float16" and (method=="beam-search" or vad):
+        if (precision=="float16" or precision=="int8_float16") and (method=="beam-search"):
             return False
         elif precision=="float32" and method=="beam-search":
             return False
@@ -175,12 +175,15 @@ if __name__ == '__main__':
     elif hardware == "biggerboi":
         os.environ['PYTHONPATH']="${PYTHONPATH}:/home/abert/abert/speech-army-knife"      # don't work
         os.environ['PYTHONPATH']="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"
-    else:
+    elif hardware == "lenovo":
         os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"
         os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/whisper-timestamped"
-
-
-
+    else:
+        i = input("Hardware not recognized, continue? (y/n)")
+        if i.lower() != "y":
+            raise ValueError("Hardware not recognized")
+    with open("log.txt", "w") as f:
+        f.write(f'')
     if not os.path.exists(CONFIG_FILE):
         generate_test(device, CONFIG_FILE, subfolder, small_test=args.small_test)
     run_commands(hardware, device, data, model_size, subfolder, args)

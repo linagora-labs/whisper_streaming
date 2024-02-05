@@ -1,5 +1,5 @@
 import logging
-logging.basicConfig(filename="log.txt", filemode="w")
+logging.basicConfig(filename="log.txt", filemode="a")
 logger = logging.getLogger(__name__)
 
 import whisper_online
@@ -93,13 +93,13 @@ def process_file(audio_path, args, online, processing_times):
     SAMPLING_RATE = 16000
 
     duration = len(whisper_online.load_audio(audio_path))/SAMPLING_RATE
-
+    logger.info("")
     logger.info(f"Processing {audio_path} (duration is {duration:.2f}s)")
 
     beg = args.start_at
     start = time.time() - beg
     os.makedirs(os.path.join(args.output_path,"transcripts"),exist_ok=True)
-
+        
     processing_times[audio_path] = {'max_vram': -1,'segment_duration' : [], 'segment_timestamps': [], 'segment_processing_time': []}
     transcripts = []
     if args.offline: ## offline mode processing (for testing/debugging)
@@ -162,7 +162,7 @@ def process_file(audio_path, args, online, processing_times):
                 if now < end+min_chunk:
                     time.sleep(min_chunk+end-now)
                 end = time.time() - start
-
+                logger.debug(f"Processing {beg:.2f} to {end:.2f}")
                 start_time = time.time()
                 a = whisper_online.load_audio_chunk(audio_path, beg, end)
                 
@@ -182,7 +182,7 @@ def process_file(audio_path, args, online, processing_times):
                 now = time.time() - start
                 processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
                 processing_times[audio_path]['segment_latency'].append(now-end)
-                logger.debug(f"## last processed {end:.2f} s, now is {now:.2f}, the latency is {now-end:.2f}")
+                logger.debug(f"The latency is {now-end:.2f}s and output is '{o[2]}'")
                 pbar.n = round(end,3)
                 pbar.refresh()
                 beg = end
@@ -229,7 +229,7 @@ def init_args():
         logging.getLogger(__name__).setLevel(level=logging.INFO)
     else:
         logging.getLogger(__name__).setLevel(level=logging.ERROR)
-        logging.basicConfig(filename="log.txt", filemode="w", level=logging.ERROR)  
+        # logging.basicConfig(filename="log.txt", filemode="a", level=logging.ERROR)  
    
     
     if args.offline and args.comp_unaware:

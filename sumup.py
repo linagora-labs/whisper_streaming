@@ -93,7 +93,7 @@ def get_values(row, key='segment_latency', mode='max'):
 
 def plot(data, wer=False):
     if wer:
-        plot_param(data, title="WER streaming vs offline", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="VAD",method="beam-search", condition_on_previous_text="NoCondition", data_type="speech", model_size="large", offline=None,  compute_type="best")
+        plot_param(data, title="WER streaming vs offline", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="VAD",method="beam-search", condition_on_previous_text="NoCondition", data_type="speech", model_size="large", offline="offline",  compute_type=None)
         plot_param(data, title="WER model size", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="VAD",method="beam-search", condition_on_previous_text="NoCondition", data_type="speech", model_size=None, offline="streaming", compute_type="best")
 
     else:   
@@ -255,8 +255,8 @@ def load_data(data_path, truth_path):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--data_path', type=str, default='../faster_n_openai/normal_large')
-    parser.add_argument('--data_path', type=str, default='../faster_n_openai/normal_large_wer')
+    parser.add_argument('--data_path', type=str, default='../faster_n_openai/normal_large')
+    # parser.add_argument('--data_path', type=str, default='../faster_n_openai/normal_large_wer')
     parser.add_argument('--ground_truth', type=str, default='../ground_truths')
     args = parser.parse_args()
 
@@ -264,5 +264,5 @@ if __name__ == '__main__':
 
     data = load_data(data_path, args.ground_truth)
     os.makedirs('plots', exist_ok=True)
-    plot(data, wer=True)
+    plot(data, wer=False)
 
