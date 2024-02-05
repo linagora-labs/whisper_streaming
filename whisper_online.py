@@ -5,6 +5,7 @@ import numpy as np
 import librosa  
 import time
 import torch
+import os
 
 from functools import lru_cache
 
@@ -501,7 +502,7 @@ def add_shared_args(parser):
 
 
 
-def output_transcript(o, start, now=None, logfile=None):
+def output_transcript(o, start=None, now=None, logfile=None):
     # output format in stdout is like:
     # 4186.3606 0 1720 Takhle to je
     # - the first three words are:
@@ -517,13 +518,14 @@ def output_transcript(o, start, now=None, logfile=None):
             logger.info(o)
     else:
         if isinstance(logfile, str):
-            logfile = open(logfile,"w")
+            logfile = open(logfile, "w")
         if now is None:
             now = time.time() - start
         if o[0] is not None:
-            print(f"{now*1000:1.4f} {o[0]*1000:1.0f} {o[1]*1000:1.0f} {o[2]}", file=logfile, flush=True)
-        else:
-            print(o, file=logfile, flush=True)
+            logfile.write(f"{now*1000:1.4f} {o[0]*1000:1.0f} {o[1]*1000:1.0f} {o[2]}")
+        # else:
+        #     print(o, file=logfile, flush=True)
+        logfile.close()
 
 ## main:
 if __name__ == "__main__":

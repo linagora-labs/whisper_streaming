@@ -48,7 +48,6 @@ def export_processing_times(args, processing_times):
             f.write(f"\t\tMin: {np.min(processing_times[i]['segment_processing_time']):.2f}\n")
             f.write(f"\t\tStd: {np.std(processing_times[i]['segment_processing_time']):.2f}\n")
             f.write(f"\t\tMedian: {np.median(processing_times[i]['segment_processing_time']):.2f}\n")
-        
 
 def export_params(args):
     with open(os.path.join(args.output_path,"params.txt"),"w") as f:
@@ -78,6 +77,16 @@ def export_params(args):
         f.write(f"Compute type: {args.compute_type}\n")
         f.write(f"Verbose: {args.verbose}\n")
 
+def export_transcipt(transcripts, file=None):
+    if isinstance(file, str):
+        f = open(file, "w")
+    else:
+        f = file
+    for i in transcripts:
+        if i[0] is not None:
+            f.write(f"{i[0]:1.3f} {i[1]:1.3f} {i[2]}\n")
+    if isinstance(file, str):
+        f.close()
 
 def process_file(audio_path, args, online, processing_times):
     min_chunk = args.min_chunk_size
@@ -88,9 +97,11 @@ def process_file(audio_path, args, online, processing_times):
     logger.info(f"Processing {audio_path} (duration is {duration:.2f}s)")
 
     beg = args.start_at
-    start = time.time()-beg
+    start = time.time() - beg
+    os.makedirs(os.path.join(args.output_path,"transcripts"),exist_ok=True)
 
     processing_times[audio_path] = {'max_vram': -1,'segment_duration' : [], 'segment_timestamps': [], 'segment_processing_time': []}
+    transcripts = []
     if args.offline: ## offline mode processing (for testing/debugging)
         start_time = time.time()
         a = whisper_online.load_audio(audio_path)
@@ -103,6 +114,7 @@ def process_file(audio_path, args, online, processing_times):
             pass
         else:
             whisper_online.output_transcript(o, start)
+            transcripts.append(o)
         processing_times[audio_path]['segment_duration'].append(duration)
         processing_times[audio_path]['segment_timestamps'].append((0,duration))
         processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
@@ -123,6 +135,7 @@ def process_file(audio_path, args, online, processing_times):
                     pass
                 else:
                     whisper_online.output_transcript(o, start, now=end)
+                    transcripts.append(o)
                 logger.debug(f"## last processed {end:.2f}s")
                 processing_times[audio_path]['segment_duration'].append(end-beg)
                 processing_times[audio_path]['segment_timestamps'].append((beg,end))
@@ -151,7 +164,7 @@ def process_file(audio_path, args, online, processing_times):
                 end = time.time() - start
 
                 start_time = time.time()
-                a = whisper_online.load_audio_chunk(audio_path,beg,end)
+                a = whisper_online.load_audio_chunk(audio_path, beg, end)
                 
                 online.insert_audio_chunk(a)
                 processing_times[audio_path]['segment_duration'].append(len(online.audio_buffer)/online.SAMPLING_RATE)
@@ -164,8 +177,8 @@ def process_file(audio_path, args, online, processing_times):
                     logger.info("assertion error")
                     pass
                 else:
-                    whisper_online.output_transcript(o,start)
-                
+                    whisper_online.output_transcript(o, start, now=end)
+                    transcripts.append(o)
                 now = time.time() - start
                 processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
                 processing_times[audio_path]['segment_latency'].append(now-end)
@@ -177,8 +190,6 @@ def process_file(audio_path, args, online, processing_times):
                     break
                 
             now = None
-
-    o = online.finish()
     if args.device == "cuda":
         processing_times[audio_path]['max_vram'] = vram_peak()
         try:
@@ -186,11 +197,11 @@ def process_file(audio_path, args, online, processing_times):
         except KeyError:
             pass
         logger.info(f"GPU used: {torch.cuda.get_device_name()}")
-    # else:
-    #     processing_times[audio_path]['max_vram'] = ram_peak()
-    logging.getLogger(__name__).setLevel(level=logging.INFO)
-    os.makedirs(os.path.join(args.output_path,"transcripts"),exist_ok=True)
-    whisper_online.output_transcript(o, start, now=now, logfile=os.path.join(args.output_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt").replace(".flac",".txt")))
+    o = online.finish()
+    transcripts.append(o)
+    # logging.getLogger(__name__).setLevel(level=logging.INFO)
+    whisper_online.output_transcript(o, start, now=now)
+    export_transcipt(transcripts, os.path.join(args.output_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt").replace(".flac",".txt")))
     return processing_times
 
 def init_args():

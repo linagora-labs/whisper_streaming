@@ -168,16 +168,16 @@ if __name__ == '__main__':
 
 
     if hardware == "koios":
-        os.system('export CUDA_DEVICE_ORDER=PCI_BUS_ID')
-        os.system('export CUDA_VISIBLE_DEVICES=1')
-        os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"')
+        os.environ['CUDA_DEVICE_ORDER']='PCI_BUS_ID'
+        os.environ['CUDA_VISIBLE_DEVICES']="1"
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/home/abert/abert/speech-army-knife"
         # os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"')
     elif hardware == "biggerboi":
-        os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"')      # don't work
-        os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"')
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/home/abert/abert/speech-army-knife"      # don't work
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"
     else:
-        os.system('export PYTHONPATH="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"')
-        os.system('export PYTHONPATH="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/whisper-timestamped"')
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/whisper-timestamped"
 
 
 
