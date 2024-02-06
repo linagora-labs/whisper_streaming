@@ -6,6 +6,7 @@ import librosa
 import time
 import torch
 import os
+import string
 
 from functools import lru_cache
 
@@ -167,10 +168,15 @@ class FasterWhisperASR(ASRBase):
     def ts_words(self, segments):
         o = []
         for segment in segments:
-            for word in segment.words:
+            for i, word in enumerate(segment.words):
                 # not stripping the spaces -- should not be merged with them!
                 w = word.word
-                t = (word.start, word.end, w)
+                if i==0:
+                    t = (segment.start, None, w)
+                elif i==len(segment.words)-1:
+                    t = (None, segment.end, w)
+                else:
+                    t = (None, None, w)
                 o.append(t)
         return o
 
@@ -201,11 +207,24 @@ class HypothesisBuffer:
         # compare self.commited_in_buffer and new. It inserts only the words in new that extend the commited_in_buffer, it means they are roughly behind last_commited_time and new in content
         # the new tail is added to self.new
         
-        new = [(a+offset,b+offset,t) for a,b,t in new]
-        self.new = [(a,b,t) for a,b,t in new if a > self.last_commited_time-0.1]
-
+        # new = [(a+offset,b+offset,t) for a,b,t in new]
+        # print(new)
+        lnew = []
+        for a,b,t in new:
+            if a:
+                a += offset
+            if b:
+                b += offset
+            lnew.append((a,b,t))
+        # for a,b,t in lnew:
+        #     if a and a > self.last_commited_time-0.1:
+        #         self.new.append((a,b,t))
+        self.new = lnew
+        # self.new = [(a,b,t) for a,b,t in lnew if a and a > self.last_commited_time-0.1]
+        print("insert:",self.new)
         if len(self.new) >= 1:
             a,b,t = self.new[0]
+            print(f"new[0]:{t} ({a},{b}), self.last_commited_time:{self.last_commited_time}")
             if abs(a - self.last_commited_time) < 1:
                 if self.commited_in_buffer:
                     # it's going to search for 1, 2, ..., 5 consecutive words (n-grams) that are identical in commited and new. If they are, they're dropped.
@@ -222,25 +241,46 @@ class HypothesisBuffer:
 
     def flush(self):
         # returns commited chunk = the longest common prefix of 2 last inserts. 
-
+        print("flushing")
         commit = []
-        while self.new:
-            na, nb, nt = self.new[0]
-
-            if len(self.buffer) == 0:
+        tmp_buffer = self.buffer.copy()
+        tmp_new = self.new.copy()
+        tmp_remove = 0
+        ct = 0
+        while tmp_new:
+            na, nb, nt = tmp_new[0]
+            print(f"new[0]:{na} {nb} ({nt})")
+            # print(f"self.buffer:{self.buffer}")
+            if len(tmp_buffer) == 0:
                 break
-
-            if nt == self.buffer[0][2]:
-                commit.append((na,nb,nt))
-                self.last_commited_word = nt
-                self.last_commited_time = nb
-                self.buffer.pop(0)
-                self.new.pop(0)
+            # print(f"blabla {nt} -> {nt.translate(str.maketrans('', '', string.punctuation))} vs {self.buffer[0][2].translate(str.maketrans('', '', string.punctuation))}")
+            if nt.translate(str.maketrans('', '', string.punctuation)) == tmp_buffer[0][2].translate(str.maketrans('', '', string.punctuation)):
+                ct += 1
+                if nb is None:
+                    nb = self.buffer[0][1]
+                    self.new[ct-1] = (na,nb,nt)
+                if nb :
+                    tmp_remove = ct
+                # commit.append((na,nb,nt))
+                # last_commited_word = nt
+                # last_commited_time = nb
+                tmp_buffer.pop(0)
+                tmp_new.pop(0)
             else:
                 break
+        for i in range(tmp_remove):
+            na, nb, t = self.new.pop(0)
+            commit.append((na,nb,t))
+            self.last_commited_time = nb
+            self.last_commited_word = t
+            self.buffer.pop(0)
         self.buffer = self.new
         self.new = []
         self.commited_in_buffer.extend(commit)
+        print("commit:",commit)
+        print("last_commited_time:",self.last_commited_time)
+        print("end flushing")
+        print()
         return commit
 
     def pop_commited(self, time):
@@ -288,8 +328,15 @@ class OnlineASRProcessor:
         "context" is the commited text that is inside the audio buffer. It is transcribed again and skipped. It is returned only for debugging and logging reasons.
         """
         k = max(0,len(self.commited)-1)
-        while k > 0 and self.commited[k-1][1] > self.last_chunked_at:
+        # print("making prompt")
+        # print("k:",k)
+        # print("commited",self.commited)
+        # print("k-1:", self.commited[k-1][1] if k>0 else None, type(self.commited[k-1][1]) if k>0 else None)
+
+        while k > 0 and (self.commited[k-1][1] is None or self.commited[k-1][1] > self.last_chunked_at):
             k -= 1
+            # print(k, self.commited[k-1] if k>0 else None)
+
 
         p = self.commited[:k]
         p = [t for _,_,t in p]
@@ -300,6 +347,7 @@ class OnlineASRProcessor:
             l += len(x)+1
             prompt.append(x)
         non_prompt = self.commited[k:]
+        # print("end prompt")
         return self.asr.sep.join(prompt[::-1]), self.asr.sep.join(t for _,_,t in non_prompt)
 
     def process_iter(self):
@@ -320,6 +368,9 @@ class OnlineASRProcessor:
         self.transcript_buffer.insert(tsw, self.buffer_time_offset)
         o = self.transcript_buffer.flush()
         self.commited.extend(o)
+        print()
+        print(self.commited)
+        print()
         logger.debug(f">>>>COMPLETE NOW:{self.to_flush(o)}")
         logger.debug(f"INCOMPLETE:{self.to_flush(self.transcript_buffer.complete())}")
 
@@ -444,12 +495,16 @@ class OnlineASRProcessor:
         if sep is None:
             sep = self.asr.sep
         t = sep.join(s[2] for s in sents)
+        # print(sents)
         if len(sents) == 0:
             b = None
             e = None
         else:
-            b = offset + sents[0][0]
-            e = offset + sents[-1][1]
+            b = None
+            e = None
+            # print(sents[0], sents[-1])
+            # b = offset + sents[0][0]
+            # e = offset + sents[-1][1]
         return (b,e,t)
 
 WHISPER_LANG_CODES = "af,am,ar,as,az,ba,be,bg,bn,bo,br,bs,ca,cs,cy,da,de,el,en,es,et,eu,fa,fi,fo,fr,gl,gu,ha,haw,he,hi,hr,ht,hu,hy,id,is,it,ja,jw,ka,kk,km,kn,ko,la,lb,ln,lo,lt,lv,mg,mi,mk,ml,mn,mr,ms,mt,my,ne,nl,nn,no,oc,pa,pl,ps,pt,ro,ru,sa,sd,si,sk,sl,sn,so,sq,sr,su,sv,sw,ta,te,tg,th,tk,tl,tr,tt,uk,ur,uz,vi,yi,yo,zh".split(",")
