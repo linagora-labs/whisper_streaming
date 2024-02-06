@@ -14,7 +14,7 @@ def get_possible_params_faster_whisper(device, small_test):
                 'methods': ["greedy", "beam-search"],
                 } if not small_test else {'precisions': ["int8"], 'vads': ["", "vad"],
                 'methods': ["greedy"]}
-    return {'precisions': ["int8", "float32", "float16", "int8_float16"],
+    return {'precisions': ["int8", "float32", "float16", "int8-float16"],
                 'vads': ["", "vad"],
                 'methods': ["greedy", "beam-search"],
                 } if not small_test else {'precisions': ["int8"], 'vads': ["", "vad"],
@@ -44,7 +44,7 @@ def is_params_valid_faster(device, precision, vad, method, subfolders=False):
             return False
         return True
     else:
-        if (precision=="float16" or precision=="int8_float16") and (method=="beam-search"):
+        if (precision=="float16" or precision=="int8-float16") and (method=="beam-search"):
             return False
         elif precision=="float32" and method=="beam-search":
             return False
@@ -130,7 +130,7 @@ def run_commands(hardware, device, data, model_size, subfolder, args):
                     command += f'python whisper_online_full_options.py {data_silence} '
                 else:
                     command += f'python whisper_online_full_options.py {data} '
-                command += f'--language {LANGUAGE} --model {model_size if not "medium" in params else "medium"} --min-chunk-size {MIN_CHUNK_SIZE} --task transcribe --device {device} --backend {backend} --compute_type {params[1]} --method {params[2]} --output_path {sub_path}'
+                command += f'--language {LANGUAGE} --model {model_size if not "medium" in params else "medium"} --min-chunk-size {MIN_CHUNK_SIZE} --task transcribe --device {device} --backend {backend} --compute_type {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
                 if subfolder:
                     command += f' --subfolders'
                 tmp = [i for i in params if i.startswith('vad')]
