@@ -198,7 +198,7 @@ class HypothesisBuffer:
         self.buffer = []
         self.new = []
 
-        self.last_commited_time = 0
+        self.last_commited_time = -1
         self.last_commited_word = None
 
         self.logfile = logfile
@@ -211,15 +211,20 @@ class HypothesisBuffer:
         # print(new)
         lnew = []
         for a,b,t in new:
-            if a:
+            if a is not None:
                 a += offset
-            if b:
+            if b is not None:
                 b += offset
             lnew.append((a,b,t))
-        # for a,b,t in lnew:
-        #     if a and a > self.last_commited_time-0.1:
-        #         self.new.append((a,b,t))
-        self.new = lnew
+        after = False if self.last_commited_word is not None else True
+        # after = False
+        for a,b,t in lnew:
+            if after or (a and a > self.last_commited_time-0.1):
+                self.new.append((a,b,t))
+                after = True
+            # else:
+            #     print(f'skipping "{t}" at {a} because it is before {self.last_commited_time} ("{self.last_commited_word}")')
+        # self.new = lnew
         # self.new = [(a,b,t) for a,b,t in lnew if a and a > self.last_commited_time-0.1]
         # print("insert:",self.new)
         if len(self.new) >= 1:
