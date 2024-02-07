@@ -179,7 +179,7 @@ if __name__ == '__main__':
         os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"
         os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/whisper-timestamped"
     else:
-        i = input("Hardware not recognized, continue? (y/n)")
+        i = input("Hardware not recognized, continue? (y/n) ")
         if i.lower() != "y":
             raise ValueError("Hardware not recognized")
     with open("log.txt", "w") as f:

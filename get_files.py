@@ -1,6 +1,7 @@
 from linastt.utils.dataset import kaldi_folder_to_dataset
 from linastt.utils.audio import load_audio, save_audio
 import os
+import re 
 
 TCOF_PATH = '/media/nas/CORPUS_PENDING/kaldi/Corpus_FR/normalized/TCOF_Adultes'
 TCOF_FILES_PATH_TO_GET = ['/media/nas/CORPUS_FINAL/Corpus_audio/Corpus_FR/OTHERS/TCOF/tcof/12/Corpus/Adultes/Conversations/voyage_con_15/voyage_con_15.wav',
@@ -60,12 +61,14 @@ def get_files_from_segments(kaldi_path, files_path_to_get, output_dir, time_limi
         sub_dataset = [j for j in dataset if j['path']==x]
         text = []
         end_time = -1
+        offset = sub_dataset[0]['start']
         for y in sub_dataset:
             text.append(y['text'])
-            if time_limit > 0 and y['end'] > time_limit:
+            if time_limit > 0 and y['end'] > time_limit+offset:
                 end_time = y['end']
                 break
         annot = ' '.join(text)
+        annot = re.sub('<.*?>', '', annot)
         annot = annot.replace('  ', ' ')
         base_file_name = os.path.basename(x)
         annot_file = os.path.join(output_dir, base_file_name.replace('.wav', '.txt'))
@@ -73,7 +76,7 @@ def get_files_from_segments(kaldi_path, files_path_to_get, output_dir, time_limi
         annot_file = os.path.join(output_dir, annot_file.replace('.mp3', '.txt'))
         with open(annot_file, 'w') as f:
             f.write(annot)
-        audio = load_audio(x, start=0, end=end_time if time_limit > 0 else None, sample_rate=16000)
+        audio = load_audio(x, start=max(0,offset-1), end=end_time if time_limit > 0 else None, sample_rate=16000)
         if search_above:
             if os.path.exists(os.path.join(output_dir, "../", base_file_name)):
                 print('Already exists', base_file_name)
