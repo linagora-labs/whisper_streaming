@@ -89,6 +89,10 @@ def export_transcipt(transcripts, file=None):
         f.close()
 
 def process_file(audio_path, args, online, processing_times):
+    if os.path.exists(os.path.join(args.output_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt").replace(".flac",".txt"))):
+        logger.info(f"{audio_path} already processed")
+        return processing_times
+
     min_chunk = args.min_chunk_size
     SAMPLING_RATE = 16000
 
@@ -303,17 +307,17 @@ def get_file_list(args):
 if __name__ == "__main__":
 
     args = init_args()
-    online_processor = init_processor(args)
 
     audios_path = get_file_list(args)
-    # load the audio into the LRU cache before we start the timer
-    a = whisper_online.load_audio_chunk(audios_path[0],0,1)
-
-    # warm up the ASR, because the very first transcribe takes much more time than the other
-    online_processor.asr.transcribe(a)
 
     processing_times = {}
     for audio_path in tqdm(audios_path, total=len(audios_path)):
+        online_processor = init_processor(args)
+        # load the audio into the LRU cache before we start the timer
+        a = whisper_online.load_audio_chunk(audios_path[0],0,1)
+
+        # warm up the ASR, because the very first transcribe takes much more time than the other
+        online_processor.asr.transcribe(a)
         processing_times = process_file(audio_path, args, online_processor, processing_times)
                 
     export_processing_times(args, processing_times)

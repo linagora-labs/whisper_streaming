@@ -38,9 +38,15 @@ def load_prediction(file_path, verbose=False):
         if line.startswith("(None, None, '')"):
             if verbose:
                 print(f'Empty prediction for {file_path}')
-            return ''
-        else:
+        elif line:
+            lines = f.readlines()
             pred += line.split(' ', 2)[2][1:]
+            for line in lines:
+                line = line.strip()
+                pred += line.split(' ', 2)[2][1:]
+        else:
+            if verbose:
+                print(f'Empty prediction for {file_path}')
     return pred
 
 def load_truth(file_path, verbose=False):
