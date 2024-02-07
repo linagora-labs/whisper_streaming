@@ -221,10 +221,10 @@ class HypothesisBuffer:
         #         self.new.append((a,b,t))
         self.new = lnew
         # self.new = [(a,b,t) for a,b,t in lnew if a and a > self.last_commited_time-0.1]
-        print("insert:",self.new)
+        # print("insert:",self.new)
         if len(self.new) >= 1:
             a,b,t = self.new[0]
-            print(f"new[0]:{t} ({a},{b}), self.last_commited_time:{self.last_commited_time}")
+            # print(f"new[0]:{t} ({a},{b}), self.last_commited_time:{self.last_commited_time}")
             if abs(a - self.last_commited_time) < 1:
                 if self.commited_in_buffer:
                     # it's going to search for 1, 2, ..., 5 consecutive words (n-grams) that are identical in commited and new. If they are, they're dropped.
@@ -249,7 +249,7 @@ class HypothesisBuffer:
         ct = 0
         while tmp_new:
             na, nb, nt = tmp_new[0]
-            print(f"new[0]:{na} {nb} ({nt})")
+            # print(f"new[0]:{na} {nb} ({nt})")
             # print(f"self.buffer:{self.buffer}")
             if len(tmp_buffer) == 0:
                 break
@@ -277,14 +277,17 @@ class HypothesisBuffer:
         self.buffer = self.new
         self.new = []
         self.commited_in_buffer.extend(commit)
-        print("commit:",commit)
-        print("last_commited_time:",self.last_commited_time)
-        print("end flushing")
-        print()
+        # print("commit:",commit)
+        # print("last_commited_time:",self.last_commited_time)
+        # print("end flushing")
+        # print()
         return commit
 
     def pop_commited(self, time):
-        while self.commited_in_buffer and self.commited_in_buffer[0][1] <= time:
+        # print("self.commited_in_buffer:",self.commited_in_buffer)
+        # print("self.commited_in_buffer[0][1]:",self.commited_in_buffer[0][1])
+        # print("time:",time)
+        while self.commited_in_buffer and (self.commited_in_buffer[0][1] is None or self.commited_in_buffer[0][1] <= time):
             self.commited_in_buffer.pop(0)
 
     def complete(self):
@@ -368,9 +371,9 @@ class OnlineASRProcessor:
         self.transcript_buffer.insert(tsw, self.buffer_time_offset)
         o = self.transcript_buffer.flush()
         self.commited.extend(o)
-        print()
-        print(self.commited)
-        print()
+        # print()
+        # print(self.commited)
+        # print()
         logger.debug(f">>>>COMPLETE NOW:{self.to_flush(o)}")
         logger.debug(f"INCOMPLETE:{self.to_flush(self.transcript_buffer.complete())}")
 
@@ -422,15 +425,18 @@ class OnlineASRProcessor:
         if self.commited == []: return
 
         ends = self.asr.segments_end_ts(res)
-
+        # print("ends:",ends)
         t = self.commited[-1][1]
-
+        # print("t:",t)
         if len(ends) > 1:
 
             e = ends[-2]+self.buffer_time_offset
+            # print("e:",e)
             while len(ends) > 2 and e > t:
                 ends.pop(-1)
                 e = ends[-2]+self.buffer_time_offset
+            #     print("w e:",e)
+            # print("e:",e, "t:",t, "e<=t:",e<=t)
             if e <= t:
                 logger.debug(f"--- segment chunked at {e:2.2f}")
                 self.chunk_at(e)#+self.buffer_time_offset)
@@ -446,6 +452,7 @@ class OnlineASRProcessor:
     def chunk_at(self, time):
         """trims the hypothesis and audio buffer at "time"
         """
+        # print("chunking at",time)
         self.transcript_buffer.pop_commited(time)
         cut_seconds = time - self.buffer_time_offset
         self.audio_buffer = self.audio_buffer[int(cut_seconds*self.SAMPLING_RATE):]

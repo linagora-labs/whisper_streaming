@@ -83,8 +83,15 @@ def export_transcipt(transcripts, file=None):
     else:
         f = file
     for i in transcripts:
-        if i[0] is not None:
+        if i[0] is not None and i[1] is not None:
             f.write(f"{i[0]:1.3f} {i[1]:1.3f} {i[2]}\n")
+        elif i[2]!="":
+            if i[0] is not None:
+                f.write(f"{i[0]:1.3f} ? {i[2]}\n")
+            if i[1] is not None:
+                f.write(f"? {i[1]:1.3f} {i[2]}\n")
+            else:
+                f.write(f"? ? {i[2]}\n")
     if isinstance(file, str):
         f.close()
 
@@ -216,7 +223,7 @@ def init_args():
     parser.add_argument('--compute_type', type=str, default="int8", choices=["int8", "float16", "float32", "int8_float16"], help='Computation type (int8, float16...).')
     parser.add_argument('--output_path', type=str, default="./", help='Output folder of the script.')
     parser.add_argument('--method', type=str, default="beam-search", choices=["beam-search", "greedy"],help='Greedy or beam search decoding.')
-    parser.add_argument('--verbose', default=1, help='Verbose mode (2=DEBUG, 1=INFO, 0=ERROR).')
+    parser.add_argument('--verbose', default=2, help='Verbose mode (2=DEBUG, 1=INFO, 0=ERROR).')
     parser.add_argument('--cpu_threads', default=4, help='When running on CPU, number of threads to use.')
     parser.add_argument('--previous_text', action="store_true", default=False, help='Condition on previous text (default False).')
     parser.add_argument('--subfolders', action="store_true", default=False, help='Search for audios in subfolders (default False).')
