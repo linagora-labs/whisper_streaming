@@ -94,7 +94,7 @@ class WhisperTimestampedASR(ASRBase):
                 initial_prompt=init_prompt, **self.transcribe_kargs)
         return result
  
-    def ts_words(self,r):
+    def ts_words(self,r, word_timestamps=True):
         # return: transcribe result object to [(beg,end,"word1"), ...]
         o = []
         for s in r["segments"]:
@@ -165,18 +165,21 @@ class FasterWhisperASR(ASRBase):
         segments, info = self.model.transcribe(audio, language=self.original_language, initial_prompt=init_prompt, word_timestamps=True, **self.transcribe_kargs)
         return list(segments)
 
-    def ts_words(self, segments):
+    def ts_words(self, segments, word_timestamps=True):
         o = []
         for segment in segments:
             for i, word in enumerate(segment.words):
                 # not stripping the spaces -- should not be merged with them!
                 w = word.word
-                if i==0:
-                    t = (segment.start, None, w)
-                elif i==len(segment.words)-1:
-                    t = (None, segment.end, w)
+                if word_timestamps:
+                    t = (word.start, word.end, w)
                 else:
-                    t = (None, None, w)
+                    if i==0:
+                        t = (segment.start, None, w)
+                    elif i==len(segment.words)-1:
+                        t = (None, segment.end, w)
+                    else:
+                        t = (None, None, w)
                 o.append(t)
         return o
 
@@ -240,13 +243,14 @@ class HypothesisBuffer:
                         tail = " ".join(self.new[j-1][2] for j in range(1,i+1))
                         if c == tail:
                             logger.debug(f"removing last {i} words:")
+                            # print(f"removing last {i} words:")
                             for j in range(i):
                                 logger.debug(f"\t{self.new.pop(0)}")
                             break
 
     def flush(self):
         # returns commited chunk = the longest common prefix of 2 last inserts. 
-        print("flushing")
+        # print("flushing")
         commit = []
         tmp_buffer = self.buffer.copy()
         tmp_new = self.new.copy()
@@ -312,6 +316,7 @@ class OnlineASRProcessor:
         self.asr = asr
         self.tokenizer = tokenizer
         self.logfile = logfile
+        self.word_timestamps = False
 
         self.init()
 
@@ -371,7 +376,8 @@ class OnlineASRProcessor:
         res = self.asr.transcribe(self.audio_buffer, init_prompt=prompt)
 
         # transform to [(beg,end,"word1"), ...]
-        tsw = self.asr.ts_words(res)
+        tsw = self.asr.ts_words(res, self.word_timestamps)
+        # print(f"TSW:{tsw}")
 
         self.transcript_buffer.insert(tsw, self.buffer_time_offset)
         o = self.transcript_buffer.flush()
@@ -508,15 +514,14 @@ class OnlineASRProcessor:
             sep = self.asr.sep
         t = sep.join(s[2] for s in sents)
         # print(sents)
-        if len(sents) == 0:
-            b = None
-            e = None
-        else:
-            b = None
-            e = None
+        b = None
+        e = None
+        if len(sents) != 0:
+            if sents[0][0] is not None:
+                b = offset + sents[0][0]
+            if sents[-1][1] is not None:
+                e = offset + sents[-1][1]
             # print(sents[0], sents[-1])
-            # b = offset + sents[0][0]
-            # e = offset + sents[-1][1]
         return (b,e,t)
 
 WHISPER_LANG_CODES = "af,am,ar,as,az,ba,be,bg,bn,bo,br,bs,ca,cs,cy,da,de,el,en,es,et,eu,fa,fi,fo,fr,gl,gu,ha,haw,he,hi,hr,ht,hu,hy,id,is,it,ja,jw,ka,kk,km,kn,ko,la,lb,ln,lo,lt,lv,mg,mi,mk,ml,mn,mr,ms,mt,my,ne,nl,nn,no,oc,pa,pl,ps,pt,ro,ru,sa,sd,si,sk,sl,sn,so,sq,sr,su,sv,sw,ta,te,tg,th,tk,tl,tr,tt,uk,ur,uz,vi,yi,yo,zh".split(",")
