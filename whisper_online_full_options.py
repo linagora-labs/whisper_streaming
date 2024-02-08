@@ -11,6 +11,7 @@ import torch
 import time
 import sys
 import numpy as np
+import gc
 
 from tqdm import tqdm
 from linastt.utils.monitoring import tic, toc, vram_peak, ram_peak 
@@ -89,9 +90,9 @@ def export_transcipt(transcripts, file=None):
         f.close()
 
 def process_file(audio_path, args, online, processing_times):
-    if os.path.exists(os.path.join(args.output_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt").replace(".flac",".txt"))):
-        logger.info(f"{audio_path} already processed")
-        return processing_times
+    # if os.path.exists(os.path.join(args.output_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt").replace(".flac",".txt"))):
+    #     logger.info(f"{audio_path} already processed")
+    #     return processing_times
 
     min_chunk = args.min_chunk_size
     SAMPLING_RATE = 16000
@@ -319,6 +320,8 @@ if __name__ == "__main__":
         # warm up the ASR, because the very first transcribe takes much more time than the other
         online_processor.asr.transcribe(a)
         processing_times = process_file(audio_path, args, online_processor, processing_times)
+        online_processor = None
+        gc.collect()
                 
     export_processing_times(args, processing_times)
     export_params(args)
