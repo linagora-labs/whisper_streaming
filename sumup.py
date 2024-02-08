@@ -136,6 +136,9 @@ def plot(data, wer=False):
 
         plot_param(combined_data, title="Memory usage depending on device and backend", key='max_vram', ylabel="RAM/VRAM usage [MB]", plot_data_mode='max', output_path='plots/', hardware=None, device=None, backend=None, method="greedy", vad='VAD', condition_on_previous_text="NoCondition", data_type="speech", cpu_threads="4t", compute_type="best")
 
+        plot_param(data_gpu, title="Latency depending on hardware", key='segment_latency', output_path='plots/gpu/', hardware=None, device="gpu", backend=None, method="greedy", vad='NoVAD', condition_on_previous_text="NoCondition", data_type="speech", compute_type="best", offline="streaming", model_size="large")
+        plot_param(data_gpu, title="Latency depending on precision on 4090 Laptop (GPU) for faster-whisper", key='segment_latency', output_path='plots/gpu/lenovo/faster', hardware="lenovo", device="gpu", backend="faster", method="greedy", vad='NoVAD', condition_on_previous_text="NoCondition", data_type="speech")
+        plot_param(data_gpu, title="VRAM usage depending on precision on 4090 Laptop (GPU) for faster-whisper", key='max_vram',output_path='plots/gpu/lenovo/faster', hardware="lenovo", device="gpu", backend="faster", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", plot_data_mode='max', condition_on_previous_text="NoCondition", data_type="speech")
 
 
 def plot_param(data, title="Latency", key='segment_latency', output_path='plots', ylabel='Latency [s]', plot_data_mode='all', hardware=None, device=None, backend=None, compute_type=None, method=None, vad=None, condition_on_previous_text=None, data_type=None, cpu_threads=None, offline="streaming", model_size="large"):
@@ -227,7 +230,15 @@ def load_data(data_path, truth_path):
                 params = [x.split('_') for x in params]
                 compute_types = [x[0] for x in params]
                 data_types = ["silence" if "silence" in x else "speech" for x in params]
-                vads = ["VAD" if "vad" in x else "NoVAD" for x in params]
+                vads = []
+                for x in params:
+                    added=False
+                    for j in x:
+                        if j.startswith('vad'):
+                            vads.append(j.upper())
+                            added=True
+                    if not added:
+                        vads.append("NoVAD")
                 methods = ["beam-search" if ("beam-search" in x or "beam" in x) else "greedy" for x in params]
                 condition_on_previous_text = ["ConditionOnPreviousText" if "previous-text" in x else "NoCondition" for x in params]
                 threads = [list({'2t', '4t', '8t', '16t'} & set(x)) for x in params]
@@ -244,7 +255,7 @@ def load_data(data_path, truth_path):
                                 file_id = os.path.basename(j).split('.')[0]
                                 wer = process_wer(os.path.join(truth_path, file_id + '.txt'), os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'transcripts', file_id), exec.split('.')[0]+"_"+file_id)
                                 raw_data[j]['wer_score'] = wer['wer'] if wer else None
-                            data.append({'hardware': hardware,'device': device, "offline": offlines[i], "model_size": model_sizes[i], 'cpu_threads': threads[i][0] if threads[i] else '4t', 'data_type':data_types[i], 'condition_on_previous_text': condition_on_previous_text[i], 'backend': "faster" if backend=="faster-whisper" else "timestamped", 'compute_type': compute_types[i], 'vad': vads[i], 'method': methods[i], 
+                            data.append({'hardware': hardware,'device': device, "offline": offlines[i], "model_size": model_sizes[i], 'cpu_threads': threads[i][0] if threads[i] else '4t', 'data_type':data_types[i], 'condition_on_previous_text': condition_on_previous_text[i], 'backend': "faster" if backend=="faster-whisper" or backend=="faster" else "timestamped", 'compute_type': compute_types[i], 'vad': vads[i], 'method': methods[i], 
                                             'data': raw_data})
                     else:
                         print(f"Missing result.json for {os.path.join(data_path, hardware, device, backend, exec.split('.')[0])}")
