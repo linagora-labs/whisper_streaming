@@ -206,21 +206,43 @@ class HypothesisBuffer:
 
         self.logfile = logfile
 
+
+
     def insert(self, new, offset):
         # compare self.commited_in_buffer and new. It inserts only the words in new that extend the commited_in_buffer, it means they are roughly behind last_commited_time and new in content
         # the new tail is added to self.new
-        
+        # print("offset:",offset)
         # new = [(a+offset,b+offset,t) for a,b,t in new]
-        # print(new)
         lnew = []
-        for a,b,t in new:
+        for i,(a,b,t) in enumerate(new):
             if a is not None:
                 a += offset
             if b is not None:
                 b += offset
+                # if i<len(new)-1:
+                #     new[i+1][1] = b
             lnew.append((a,b,t))
+
+            # if a is not None or b is not None:
+            #     print(f"inserting {t} at {a} {b}")
+        # print("lnew:",lnew)
+        # print("self.commited_in_buffer:",self.commited_in_buffer)
+        
+        last_commited_idx = len(self.commited_in_buffer)-1
+        if last_commited_idx>=0 and last_commited_idx<len(lnew) and lnew[last_commited_idx][0] is None:
+            lnew[last_commited_idx] = (self.commited_in_buffer[last_commited_idx][1],lnew[last_commited_idx][1],lnew[last_commited_idx][2])
+
+        # for i, (a,b,t) in enumerate(self.commited_in_buffer):
+        #     if a is None:
+        #         a = lnew[i][0]
+        #     if b is None:
+        #         b = lnew[i][1]
+        #     if lnew[i+1][0] is None:
+        #         lnew[i+1] = (b,lnew[i+1][1],lnew[i+1][2])
+        #     lnew[i] = (a,b,t)
+        # print("updated lnew:",lnew)
+        # print(f"inserting {lnew}")
         after = False if self.last_commited_word is not None else True
-        # after = False
         for a,b,t in lnew:
             if after or (a and a > self.last_commited_time-0.1):
                 self.new.append((a,b,t))
@@ -229,7 +251,7 @@ class HypothesisBuffer:
             #     print(f'skipping "{t}" at {a} because it is before {self.last_commited_time} ("{self.last_commited_word}")')
         # self.new = lnew
         # self.new = [(a,b,t) for a,b,t in lnew if a and a > self.last_commited_time-0.1]
-        # print("insert:",self.new)
+        # print("inserted:",self.new)
         if len(self.new) >= 1:
             a,b,t = self.new[0]
             # print(f"new[0]:{t} ({a},{b}), self.last_commited_time:{self.last_commited_time}")
@@ -245,6 +267,7 @@ class HypothesisBuffer:
                             logger.debug(f"removing last {i} words:")
                             # print(f"removing last {i} words:")
                             for j in range(i):
+                                # print(f"\t{self.new[0]}")
                                 logger.debug(f"\t{self.new.pop(0)}")
                             break
 
@@ -265,10 +288,17 @@ class HypothesisBuffer:
             # print(f"blabla {nt} -> {nt.translate(str.maketrans('', '', string.punctuation))} vs {self.buffer[0][2].translate(str.maketrans('', '', string.punctuation))}")
             if nt.translate(str.maketrans('', '', string.punctuation)) == tmp_buffer[0][2].translate(str.maketrans('', '', string.punctuation)):
                 ct += 1
-                if nb is None:
-                    nb = self.buffer[0][1]
+                # print(f"new[0]:{na} {nb} ({nt})")
+                if na is None and tmp_buffer[0][0] is not None:
+                    # print(f"\t update na {nt}: {na} with buffer[0];", tmp_buffer[0])
+                    na = tmp_buffer[0][0]
+                    self.new[ct-1] = (na,nb,nt)
+                if nb is None and tmp_buffer[0][1] is not None:
+                    # print(f"\t update nb {nt}: {nb} with buffer[0];", tmp_buffer[0])
+                    nb = tmp_buffer[0][1]
                     self.new[ct-1] = (na,nb,nt)
                 if nb :
+                    # print(f"\t Set remove to {ct} (t={nt})")
                     tmp_remove = ct
                 # commit.append((na,nb,nt))
                 # last_commited_word = nt
@@ -279,11 +309,15 @@ class HypothesisBuffer:
                 break
         for i in range(tmp_remove):
             na, nb, t = self.new.pop(0)
+            # print(f"committing {t} at {na} {nb}")
             commit.append((na,nb,t))
             self.last_commited_time = nb
             self.last_commited_word = t
             self.buffer.pop(0)
         self.buffer = self.new
+        if self.buffer and self.buffer[0][0] is None:
+            self.buffer[0] = (self.last_commited_time, self.buffer[0][1], self.buffer[0][2])
+        # print(f"buffer:{self.buffer}")
         self.new = []
         self.commited_in_buffer.extend(commit)
         # print("commit:",commit)
@@ -381,6 +415,7 @@ class OnlineASRProcessor:
 
         self.transcript_buffer.insert(tsw, self.buffer_time_offset)
         o = self.transcript_buffer.flush()
+        # print("o:",o)
         self.commited.extend(o)
         # print()
         # print(self.commited)
@@ -503,6 +538,8 @@ class OnlineASRProcessor:
         o = self.transcript_buffer.complete()
         f = self.to_flush(o)
         logger.debug(f"last, noncommited:{f}")
+        # print()
+        # print("commited:",self.commited)
         return f
 
 

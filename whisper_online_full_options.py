@@ -79,7 +79,7 @@ def export_params(args):
 
 def export_transcipt(transcripts, file=None):
     if isinstance(file, str):
-        f = open(file, "w")
+        f = open(file, "w", encoding="ISO-8859-1")
     else:
         f = file
     for i in transcripts:
