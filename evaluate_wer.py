@@ -67,8 +67,8 @@ def process_wer(ref_file, pred_file, name="", verbose=False, erros=False):
     wer_score = compute_wer([ref], [pred], normalization="fr", use_percents=True)
     if verbose:
         print(f"{name} WER: {wer_score['wer']:.2f}")
-    if wer_score['wer']>100:
-        print(f"WER > 100% for {name} ({wer_score['wer']:.2f})")
+    if wer_score['wer']>90:
+        print(f"WER > 90% for {name} ({wer_score['wer']:.2f})")
     return wer_score
     
 
