@@ -4,6 +4,9 @@ from tqdm import tqdm
 
 LANGUAGE = "fr"
 MIN_CHUNK_SIZE = 2
+# GPU_SUPPORTED_PRECISIONS = ["int8," "float32", "float16", "int8-float16"]
+GPU_SUPPORTED_PRECISIONS = ["int8", "float32"]
+
 
 CONFIG_FILE = "benchmark_configs.txt"
 
@@ -14,7 +17,7 @@ def get_possible_params_faster_whisper(device, small_test):
                 'methods': ["greedy", "beam-search"],
                 } if not small_test else {'precisions': ["int8"], 'vads': ["", "vad"],
                 'methods': ["greedy"]}
-    return {'precisions': ["int8", "float32", "float16", "int8-float16"],
+    return {'precisions': GPU_SUPPORTED_PRECISIONS,
                 'vads': ["", "vad"],
                 'methods': ["greedy", "beam-search"],
                 } if not small_test else {'precisions': ["int8"], 'vads': ["", "vad"],
@@ -91,7 +94,7 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                                 f.write(f'{backend}_{test_id}_2t\n')
                                 f.write(f'{backend}_{test_id}_8t\n')
                                 # f.write(f'{backend}_{test_id}_16t\n')
-                            if device=="cuda" and not small_test and ((backend.startswith("whisper_timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="vad":
+                            if device=="cuda" and not small_test and ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="vad":
                                 f.write(f'{backend}_{test_id}_previous-text\n')
                             if not subfolders:
                                 if method == "greedy" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")):
@@ -102,6 +105,7 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                                 if method == "beam-search" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")) and vad=="vad":
                                     f.write(f'{backend}_{test_id}_offline\n')
                                     f.write(f'{backend}_{test_id}_medium\n')
+                                    f.write(f'{backend}_{test_id}_large-v1\n')
 
 
 def run_commands(hardware, device, data, model_size, subfolder, args):
@@ -130,7 +134,12 @@ def run_commands(hardware, device, data, model_size, subfolder, args):
                     command += f'python whisper_online_full_options.py {data_silence} '
                 else:
                     command += f'python whisper_online_full_options.py {data} '
-                command += f'--language {LANGUAGE} --model {model_size if not "medium" in params else "medium"} --min-chunk-size {MIN_CHUNK_SIZE} --task transcribe --device {device} --backend {backend} --compute_type {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
+                model = model_size
+                if "medium" in params:
+                    model="medium"
+                elif "large-v1" in params:
+                    model="large-v1"
+                command += f'--language {LANGUAGE} --model {model} --min-chunk-size {MIN_CHUNK_SIZE} --task transcribe --device {device} --backend {backend} --compute_type {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
                 if subfolder:
                     command += f' --subfolders'
                 tmp = [i for i in params if i.startswith('vad')]
