@@ -93,7 +93,7 @@ def get_values(row, key='segment_latency', mode='max'):
 
 def plot(data, wer=False):
     if wer:
-        plot_param(data, title="WER streaming vs offline", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="VAD",method="beam-search", condition_on_previous_text="NoCondition", data_type="speech", model_size="large", offline=None,  compute_type="best")
+        plot_param(data, title="WER streaming vs offline", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="VAD",method="beam-search", condition_on_previous_text="NoCondition", data_type="speech", model_size="large-v3", offline=None,  compute_type="best")
         plot_param(data, title="WER model size", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="VAD",method="beam-search", condition_on_previous_text="NoCondition", data_type="speech", model_size=None, offline="streaming", compute_type="best")
         plot_param(data, title="WER depending on precision on 1080TI (GPU) for faster-whisper", ylabel="WER", key='wer_score', output_path='plots/wer/faster', hardware="koios", device="gpu", backend="faster", method="greedy", vad='NoVAD', condition_on_previous_text="NoCondition", data_type="speech", compute_type=None)
         plot_param(data, title="WER depending on precision on 1080TI (GPU)", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", backend=None, method="greedy", vad='NoVAD', condition_on_previous_text="NoCondition", data_type="speech", compute_type=None)
@@ -158,7 +158,7 @@ def plot(data, wer=False):
         # plot_param(data_gpu, title="Latency depending Previous text on 4090", key='segment_latency', output_path='plots/gpu/lenovo', hardware="lenovo", device="gpu", backend=None, method="greedy", vad="NoVAD", condition_on_previous_text=None, compute_type="best", data_type="speech")
 
 
-def plot_param(data, title="Latency", key='segment_latency', output_path='plots', ylabel='Latency [s]', plot_data_mode='all', hardware=None, device=None, backend=None, compute_type=None, method=None, vad=None, condition_on_previous_text=None, data_type=None, cpu_threads=None, offline="streaming", model_size="large"):
+def plot_param(data, title="Latency", key='segment_latency', output_path='plots', ylabel='Latency [s]', plot_data_mode='all', hardware=None, device=None, backend=None, compute_type=None, method=None, vad=None, condition_on_previous_text=None, data_type=None, cpu_threads=None, offline="streaming", model_size="large-v3"):
     os.makedirs(output_path, exist_ok=True)
     description = [f"hardware: {hardware}" if hardware is not None else ""]
     description.append(f"device: {device}" if device is not None else "")
@@ -261,7 +261,15 @@ def load_data(data_path, truth_path):
                 methods = ["beam-search" if ("beam-search" in x or "beam" in x) else "greedy" for x in params]
                 condition_on_previous_text = ["ConditionOnPreviousText" if "previous-text" in x else "NoCondition" for x in params]
                 threads = [list({'2t', '4t', '8t', '16t'} & set(x)) for x in params]
-                model_sizes = ["medium" if "medium" in x else "large" for x in params]
+                model_sizes = []
+                for x in params:
+                    added=False
+                    for j in x:
+                        if j.startswith('large') or j=="medium" or j=="small" or j=="tiny":
+                            model_sizes.append(j)
+                            added=True
+                    if not added:
+                        model_sizes.append("large-v3")
                 offlines = ["offline" if "offline" in x else "streaming" for x in params]
                 for i, exec in enumerate(execs):
                     if os.path.exists(os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'result.json')):

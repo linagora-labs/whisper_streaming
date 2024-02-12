@@ -4,6 +4,7 @@ from tqdm import tqdm
 
 LANGUAGE = "fr"
 MIN_CHUNK_SIZE = 2
+BUFFER_TRIMMING_SEC = 15
 # GPU_SUPPORTED_PRECISIONS = ["int8," "float32", "float16", "int8-float16"]
 GPU_SUPPORTED_PRECISIONS = ["int8", "float32"]
 
@@ -139,7 +140,7 @@ def run_commands(hardware, device, data, model_size, subfolder, args):
                     model="medium"
                 elif "large-v1" in params:
                     model="large-v1"
-                command += f'--language {LANGUAGE} --model {model} --min-chunk-size {MIN_CHUNK_SIZE} --task transcribe --device {device} --backend {backend} --compute_type {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
+                command += f'--language {LANGUAGE} --model {model} --min-chunk-size {MIN_CHUNK_SIZE} --buffer_trimming_sec {BUFFER_TRIMMING_SEC} --task transcribe --device {device} --backend {backend} --compute_type {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
                 if subfolder:
                     command += f' --subfolders'
                 tmp = [i for i in params if i.startswith('vad')]

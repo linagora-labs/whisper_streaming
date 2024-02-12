@@ -127,7 +127,7 @@ def process_file(audio_path, args, online, processing_times):
         now = None
     elif args.comp_unaware:  # computational unaware mode 
         end = beg + min_chunk
-        with tqdm(total=duration) as pbar:
+        with tqdm(total=round(duration,3)) as pbar:
             while True:
                 start_time = time.time()
                 a = whisper_online.load_audio_chunk(audio_path,beg,end)
@@ -161,7 +161,7 @@ def process_file(audio_path, args, online, processing_times):
     else: # online = simultaneous mode
         processing_times[audio_path]['segment_latency'] = []
         end = 0
-        with tqdm(total=duration) as pbar:
+        with tqdm(total=round(duration,3)) as pbar:
             while True:
                 now = time.time() - start
                 if now < end+min_chunk:
