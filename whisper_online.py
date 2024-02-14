@@ -7,6 +7,7 @@ import time
 import torch
 import os
 import string
+import re
 
 from functools import lru_cache
 
@@ -116,7 +117,122 @@ class WhisperTimestampedASR(ASRBase):
         self.transcribe_kargs["task"] = "translate"
 
 
+class HuggingFaceTransformerASR(ASRBase):
 
+    sep = ""
+
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr, condition_on_previous_text=None, model_kwargs=None):
+        self.flash_attention = model_kwargs.get('flash_attention', False)
+        super().__init__(lan, modelsize=modelsize, cache_dir=cache_dir, model_dir=model_dir, logfile=logfile, model_kwargs=model_kwargs)
+        self.transcribe_kargs['beam_size'] = 1
+        self.transcribe_kargs['best_of'] = 1
+        self.transcribe_kargs['temperature'] = 0
+        self.transcribe_kargs['condition_on_previous_text'] = False if condition_on_previous_text is None else condition_on_previous_text
+
+
+    def load_model(self, modelsize=None, cache_dir=None, model_dir=None, model_kwargs=None):
+        from transformers import WhisperProcessor, WhisperForConditionalGeneration
+        if model_dir is not None:
+            logger.info(f"Loading whisper model from model_dir {model_dir}. modelsize and cache_dir parameters are not used.")
+            model_size_or_path = model_dir
+        elif modelsize is not None:
+            model_size_or_path = "openai/whisper-"+modelsize
+        else:
+            raise ValueError("modelsize or model_dir parameter must be set")
+        if model_kwargs['device']=="cpu" and model_kwargs.get('compute_type', '') =="float16":
+            model_kwargs['compute_type'] = "int8"
+            logger.info("Float16 is not supported on CPU, using INT8 instead.")
+        if model_kwargs.get('device', "cuda")=="cpu":
+            torch.set_num_threads(int(model_kwargs['cpu_threads']))
+        model_kwargs.pop('cpu_threads', None)
+        if model_kwargs.get('compute_type', '') =="float16":
+            if self.flash_attention:
+                model_kwargs['attn_implementation'] = "flash_attention_2"
+            self.model_precision = torch.float16
+        elif model_kwargs.get('compute_type', '') =="int8":
+            self.model_precision = torch.int8
+        elif model_kwargs.get('compute_type', '') =="float32":
+            self.model_precision = torch.float32
+        else:
+            raise ValueError(f"Unknown compute_type: {model_kwargs.get('compute_type', '')}")
+        model_kwargs['torch_dtype'] = self.model_precision
+        model_kwargs.pop('compute_type', None)
+        model_kwargs['device_map'] = model_kwargs['device']
+        self.device = model_kwargs['device']
+        model_kwargs.pop('device', None)
+        # config = WhisperConfig(**model_kwargs)
+        # self.generation_config = transformers.PretrainedConfig.from_pretrained(model_size_or_path, cache_dir=cache_dir, **model_kwargs)
+        # self.generation_config.no_timestamps_token_id = False
+        self.processor = WhisperProcessor.from_pretrained(model_size_or_path, cache_dir=cache_dir, **model_kwargs)
+        # model = WhisperForConditionalGeneration.from_pretrained(model_size_or_path)#, config=self.generation_config)#, cache_dir=cache_dir, **model_kwargs)
+        model = WhisperForConditionalGeneration.from_pretrained(model_size_or_path, cache_dir=cache_dir, **model_kwargs)
+
+        # model.generation_config = self.generation_config
+        # model = WhisperModel(model_size_or_path, download_root=cache_dir, **model_kwargs)
+        return model
+
+    def transcribe(self, audio, init_prompt=""):
+        # generation_config = self.model.generation_config
+
+        prompt_ids = self.processor.get_prompt_ids(init_prompt) if (init_prompt and init_prompt.strip()) else None
+
+        use_token_timestamps = True
+        features = self.processor(audio, sampling_rate=16000, return_tensors="pt", truncation=False).input_features.to(self.device)
+        # Generate token ids
+        generate_kwargs = dict(
+            return_dict_in_generate = True,
+            return_segments = True,
+            return_timestamps = True,
+            return_token_timestamps = use_token_timestamps,
+            # max_length = self.dims.n_text_ctx,
+            is_multilingual = True,
+            prompt_ids = prompt_ids,
+            # generation_config = generation_config,
+            language = self.original_language,
+            task = self.transcribe_kargs.get("task", "transcribe"),
+        )
+        if self.model_precision == torch.float16:
+            features = features.half()
+
+        # Transcribe
+        output = self.model.generate(
+            features,
+            **generate_kwargs
+        )
+        predictions = self.processor.batch_decode(output['sequences'], decode_with_timestamps=True, skip_special_tokens=True)[0]
+        pattern = r'<\|([^\|]+)\|>(.*?)<\|([^\|]+)\|>'
+        segments = []
+        matches = re.findall(pattern, predictions)
+        for i in matches:
+            t = dict(start=float(i[0]), end=float(i[2]), words=[" "+x for x in i[1].split(" ") if x!=""])
+            segments.append(t)
+        return list(segments)
+
+    def ts_words(self, segments, word_timestamps=True):
+        o = []
+        if word_timestamps:
+            raise ValueError(f"Words timstamps not implemented for hugging face transformers")
+        for segment in segments:
+            
+            for i, word in enumerate(segment['words']):
+                # not stripping the spaces -- should not be merged with them!
+                if i==0:
+                    t = (segment['start'], None, word)
+                elif i==len(segment['words'])-1:
+                    t = (None, segment['end'], word)
+                else:
+                    t = (None, None, word)
+                o.append(t)
+        return o
+
+    def segments_end_ts(self, res):
+        return [s['end'] for s in res]
+
+    def use_vad(self, vad_name=None):
+        self.transcribe_kargs["vad_filter"] = True
+
+    def set_translate_task(self):
+        self.transcribe_kargs["task"] = "translate"
 
 class FasterWhisperASR(ASRBase):
     """Uses faster-whisper library as the backend. Works much faster, appx 4-times (in offline mode). For GPU, it requires installation with a specific CUDNN version.
@@ -407,6 +523,7 @@ class OnlineASRProcessor:
         logger.debug(f"PROMPT:{prompt}")
         logger.debug(f"CONTEXT:{non_prompt}")
         logger.debug(f"Transcribing {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f} seconds starting at {self.buffer_time_offset:2.2f}s")
+        # print(f"Transcribing {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f} seconds starting at {self.buffer_time_offset:2.2f}s")
         res = self.asr.transcribe(self.audio_buffer, init_prompt=prompt)
 
         # transform to [(beg,end,"word1"), ...]
@@ -434,8 +551,9 @@ class OnlineASRProcessor:
             s = self.buffer_trimming_sec  # trim the completed segments longer than s,
         else:
             s = 30 # if the audio buffer is longer than 30s, trim it
-        
+        # print(f"len of buffer now: {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f}s")
         if len(self.audio_buffer)/self.SAMPLING_RATE > s:
+            # print(f"chunking segment")
             self.chunk_completed_segment(res)
 
             # alternative: on any word
@@ -446,6 +564,7 @@ class OnlineASRProcessor:
             #    k -= 1
             #t = self.commited[k][1] 
             logger.debug(f"chunking segment")
+            # print(f"chunked segment")
             #self.chunk_at(t)
 
         logger.debug(f"len of buffer now: {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f}")
@@ -468,9 +587,13 @@ class OnlineASRProcessor:
         self.chunk_at(chunk_at)
 
     def chunk_completed_segment(self, res):
-        if self.commited == []: return
+        if self.commited == []: 
+            # print('no commited text yet, no chunking')
+            return
 
+        # print("res:",res)
         ends = self.asr.segments_end_ts(res)
+        # print("ends:",ends)
         # print("ends:",ends)
         t = self.commited[-1][1]
         # print("t:",t)
@@ -490,6 +613,7 @@ class OnlineASRProcessor:
                 logger.debug(f"--- last segment not within commited area")
         else:
             logger.debug(f"--- not enough segments to chunk")
+            # print('not enough segments to chunk, no chunking')
 
 
 
@@ -604,7 +728,7 @@ def add_shared_args(parser):
     parser.add_argument('--model_dir', type=str, default=None, help="Dir where Whisper model.bin and other files are saved. This option overrides --model and --model_cache_dir parameter.")
     parser.add_argument('--lan', '--language', type=str, default='en', help="Language code for transcription, e.g. en,de,cs.")
     parser.add_argument('--task', type=str, default='transcribe', choices=["transcribe","translate"],help="Transcribe or translate.")
-    parser.add_argument('--backend', type=str, default="faster-whisper", choices=["faster-whisper", "whisper_timestamped-openai", "whisper_timestamped-transformers"],help='Load only this backend for Whisper processing.')
+    parser.add_argument('--backend', type=str, default="faster-whisper", choices=["faster-whisper", "whisper_timestamped-openai","transformers", "whisper_timestamped-transformers"],help='Load only this backend for Whisper processing.')
     parser.add_argument('--vad', action='store', default=False, const=True, nargs='?', help='Use VAD = voice activity detection, with the default parameters.')
     parser.add_argument('--buffer_trimming', type=str, default="segment", choices=["sentence", "segment"],help='Buffer trimming strategy -- trim completed sentences marked with punctuation mark and detected by sentence segmenter, or the completed segments returned by Whisper. Sentence segmenter must be installed for "sentence" option.')
     parser.add_argument('--buffer_trimming_sec', type=float, default=15, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')

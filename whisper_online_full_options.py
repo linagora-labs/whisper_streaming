@@ -32,7 +32,7 @@ def export_processing_times(args, processing_times):
         f.write(f"All segements statistics:\n")
         for i in processing_times:
             all_processing_times += processing_times[i]['segment_processing_time']
-        f.write(f"\tNumber of segements: {len(all_processing_times)}\n")
+        f.write(f"\tNumber of segments: {len(all_processing_times)}\n")
         f.write(f"\tTotal time: {np.sum(all_processing_times):.2f}\n")
         f.write(f"\tMean: {np.mean(all_processing_times):.2f}\n")
         f.write(f"\tMax: {np.max(all_processing_times):.2f}\n")
@@ -74,7 +74,7 @@ def export_params(args):
         f.write(f"VAD: {args.vad}\n")
         f.write(f"Method: {args.method}\n")
         f.write(f"Previous text: {args.previous_text}\n")
-        f.write(f"Compute type: {args.compute_type}\n")
+        f.write(f"Compute type: {args.precision}\n")
         f.write(f"Verbose: {args.verbose}\n")
 
 def export_transcipt(transcripts, file=None):
@@ -220,7 +220,7 @@ def init_args():
     parser.add_argument('--offline', action="store_true", default=False, help='Offline mode.')
     parser.add_argument('--comp_unaware', action="store_true", default=False, help='Computationally unaware simulation.')
     parser.add_argument('--device', type=str, default="cuda", choices=["cuda", "cpu"],help='Device used.')
-    parser.add_argument('--compute_type', type=str, default="int8", choices=["int8", "float16", "float32", "int8_float16"], help='Computation type (int8, float16...).')
+    parser.add_argument('--precision', type=str, default="int8", choices=["int8", "float16", "float32", "int8_float16"], help='Computation type (int8, float16...).')
     parser.add_argument('--output_path', type=str, default="./", help='Output folder of the script.')
     parser.add_argument('--method', type=str, default="beam-search", choices=["beam-search", "greedy"],help='Greedy or beam search decoding.')
     parser.add_argument('--verbose', default=2, help='Verbose mode (2=DEBUG, 1=INFO, 0=ERROR).')
@@ -250,9 +250,11 @@ def init_processor(args):
 
     t = time.time()
     logger.info(f"Loading Whisper {size} model for {language}...")
-    model_kwargs = {'device': args.device, 'cpu_threads': int(args.cpu_threads), 'compute_type': args.compute_type}
+    model_kwargs = {'device': args.device, 'cpu_threads': int(args.cpu_threads), 'compute_type': args.precision}
     if args.backend == "faster-whisper":
         asr_cls = whisper_online.FasterWhisperASR
+    elif args.backend == "transformers":
+        asr_cls = whisper_online.HuggingFaceTransformerASR
     else:
         asr_cls = whisper_online.WhisperTimestampedASR
         if args.backend == "whisper_timestamped-transformers":

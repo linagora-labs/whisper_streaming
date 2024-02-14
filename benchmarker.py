@@ -130,7 +130,7 @@ def run_commands(hardware, device, data, model_size, subfolder, args):
                     command += f'python whisper_online_full_options.py {data_silence} '
                 else:
                     command += f'python whisper_online_full_options.py {data} '
-                command += f'--language {LANGUAGE} --model {model_size if not "medium" in params else "medium"} --min-chunk-size {MIN_CHUNK_SIZE} --task transcribe --device {device} --backend {backend} --compute_type {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
+                command += f'--language {LANGUAGE} --model {model_size if not "medium" in params else "medium"} --min-chunk-size {MIN_CHUNK_SIZE} --task transcribe --device {device} --backend {backend} --precision {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
                 if subfolder:
                     command += f' --subfolders'
                 tmp = [i for i in params if i.startswith('vad')]
@@ -179,7 +179,9 @@ if __name__ == '__main__':
         os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"
         os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/whisper-timestamped"
     else:
-        pass
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/whisper-timestamped"
+        # pass
         # i = input("Hardware not recognized, continue? (y/n)")
         # if i.lower() != "y":
         #     raise ValueError("Hardware not recognized")
