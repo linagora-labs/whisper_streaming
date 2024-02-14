@@ -91,7 +91,7 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                             test_id += f'_{vad.replace(" ", "-")}'
                         if (backend == "faster-whisper" and is_params_valid_faster(device,precision, vad, method, subfolders)) or (backend.startswith("whisper-timestamped") and is_params_valid_whisper_timestamped(device, precision, vad, method, subfolders)):
                             f.write(f'{backend}_{test_id}\n')
-                            if device=='cpu' and not small_test ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
+                            if device=='cpu' and not small_test and ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
                                 f.write(f'{backend}_{test_id}_2t\n')
                                 f.write(f'{backend}_{test_id}_8t\n')
                                 # f.write(f'{backend}_{test_id}_16t\n')
