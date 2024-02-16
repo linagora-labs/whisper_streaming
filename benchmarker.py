@@ -140,6 +140,8 @@ def run_commands(hardware, device, data, model_size, subfolder, args):
                     model="medium"
                 elif "large-v1" in params:
                     model="large-v1"
+                elif "tiny" in params:
+                    model="tiny"
                 command += f'--language {LANGUAGE} --model {model} --min-chunk-size {MIN_CHUNK_SIZE} --buffer_trimming_sec {BUFFER_TRIMMING_SEC} --task transcribe --device {device} --backend {backend} --compute_type {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
                 if subfolder:
                     command += f' --subfolders'
