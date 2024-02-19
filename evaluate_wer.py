@@ -32,15 +32,23 @@ def load_data(data_path, ground_truth_folder):
 
 def load_prediction(file_path, verbose=False):
     pred = ''
-    with open(file_path+".txt", 'r') as f:
+    if file_path.endswith('.txt'):
+        file_path = file_path[:-4]
+    with open(file_path+".txt", 'r', encoding="ISO-8859-1") as f:
         line = f.readline()
         line = line.strip()
         if line.startswith("(None, None, '')"):
             if verbose:
                 print(f'Empty prediction for {file_path}')
-            return ''
+        elif line:
+            lines = f.readlines()
+            pred += line.split(' ', 2)[2]
+            for line in lines:
+                line = line.strip()
+                pred += line.split(' ', 2)[2]
         else:
-            pred += line.split(' ', 2)[2][1:]
+            if verbose:
+                print(f'Empty prediction for {file_path}')
     return pred
 
 def load_truth(file_path, verbose=False):
@@ -49,7 +57,7 @@ def load_truth(file_path, verbose=False):
         txt = ' '.join(lines)
     return txt
 
-def process_wer(ref_file, pred_file, name="", verbose=False, erros=False):
+def process_wer(ref_file, pred_file, name="", verbose=False, erros=True):
     try:
         pred = load_prediction(pred_file, verbose=verbose)
         ref = load_truth(ref_file, verbose=verbose)
@@ -58,6 +66,7 @@ def process_wer(ref_file, pred_file, name="", verbose=False, erros=False):
             print(e)
         return None
     # compute wer between ref and pred
+    print(f"pred: {pred}")
     wer_score = compute_wer([ref], [pred], normalization="fr", use_percents=True)
     if verbose:
         print(f"{name} WER: {wer_score['wer']:.2f}")

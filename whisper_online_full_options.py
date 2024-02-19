@@ -208,7 +208,14 @@ def process_file(audio_path, args, online, processing_times):
     transcripts.append(o)
     # logging.getLogger(__name__).setLevel(level=logging.INFO)
     whisper_online.output_transcript(o, start, now=now)
-    export_transcipt(transcripts, os.path.join(args.output_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt").replace(".flac",".txt")))
+    transcript_file_name = os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt").replace(".flac",".txt")
+    export_transcipt(transcripts, os.path.join(args.output_path,"transcripts",transcript_file_name))
+    print_wer = True
+    if print_wer:
+        from evaluate_wer import process_wer
+        ground_truth_folder = "C:/Users/berta/Documents/Linagora/ground_truths"
+        wer = process_wer(os.path.join(ground_truth_folder, transcript_file_name), os.path.join(args.output_path,"transcripts",transcript_file_name), transcript_file_name, verbose=False, erros=True)
+        print(f"WER: {wer}")
     return processing_times
 
 def init_args():

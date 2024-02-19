@@ -158,6 +158,7 @@ class HuggingFaceTransformerASR(ASRBase):
         model_kwargs['torch_dtype'] = self.model_precision
         model_kwargs.pop('compute_type', None)
         model_kwargs['device_map'] = model_kwargs['device']
+        # model_kwargs['output_attentions'] = False
         self.device = model_kwargs['device']
         model_kwargs.pop('device', None)
         # config = WhisperConfig(**model_kwargs)
@@ -176,14 +177,13 @@ class HuggingFaceTransformerASR(ASRBase):
 
         prompt_ids = self.processor.get_prompt_ids(init_prompt) if (init_prompt and init_prompt.strip()) else None
 
-        use_token_timestamps = True
         features = self.processor(audio, sampling_rate=16000, return_tensors="pt", truncation=False).input_features.to(self.device)
         # Generate token ids
         generate_kwargs = dict(
             return_dict_in_generate = True,
             return_segments = True,
             return_timestamps = True,
-            return_token_timestamps = use_token_timestamps,
+            return_token_timestamps = True,
             # max_length = self.dims.n_text_ctx,
             is_multilingual = True,
             prompt_ids = prompt_ids,
@@ -191,6 +191,19 @@ class HuggingFaceTransformerASR(ASRBase):
             language = self.original_language,
             task = self.transcribe_kargs.get("task", "transcribe"),
         )
+        # generate_kwargs = dict(
+        #     return_dict_in_generate = True,
+        #     return_segments = True,
+        #     return_timestamps = True,
+        #     return_token_timestamps = False,
+        #     # max_length = self.dims.n_text_ctx,
+        #     is_multilingual = True,
+        #     prompt_ids = prompt_ids,
+        #     # generation_config = generation_config,
+        #     language = self.original_language,
+        #     task = self.transcribe_kargs.get("task", "transcribe"),
+        #     output_attentions = False
+        # )
         if self.model_precision == torch.float16:
             features = features.half()
 
@@ -261,7 +274,7 @@ class FasterWhisperASR(ASRBase):
             model_kwargs['compute_type'] = "int8"
             logger.info("Float16 is not supported on CPU, using INT8 instead.")
         model = WhisperModel(model_size_or_path, download_root=cache_dir, **model_kwargs)
-
+        
         # if device == "cuda":
         #     # this worked fast and reliably on NVIDIA L40
         #     model = WhisperModel(model_size_or_path, device="cuda", compute_type=compute_type, download_root=cache_dir)
@@ -409,16 +422,18 @@ class HypothesisBuffer:
                     # print(f"\t update na {nt}: {na} with buffer[0];", tmp_buffer[0])
                     na = tmp_buffer[0][0]
                     self.new[ct-1] = (na,nb,nt)
+                    if ct > 1 and self.new[ct-2][0] is not None:
+                        self.new[ct-2] = (na, self.new[ct-2][1], self.new[ct-2][2])
                 if nb is None and tmp_buffer[0][1] is not None:
                     # print(f"\t update nb {nt}: {nb} with buffer[0];", tmp_buffer[0])
                     nb = tmp_buffer[0][1]
                     self.new[ct-1] = (na,nb,nt)
+                    if len(self.new) > ct and self.new[ct-1][1] is not None:
+                        self.new[ct] = (self.new[ct][0], self.new[ct-1][1], self.new[ct][2])
                 if nb :
                     # print(f"\t Set remove to {ct} (t={nt})")
                     tmp_remove = ct
                 # commit.append((na,nb,nt))
-                # last_commited_word = nt
-                # last_commited_time = nb
                 tmp_buffer.pop(0)
                 tmp_new.pop(0)
             else:
@@ -437,7 +452,7 @@ class HypothesisBuffer:
         self.new = []
         self.commited_in_buffer.extend(commit)
         # print("commit:",commit)
-        # print("last_commited_time:",self.last_commited_time)
+        # print(f"last_commited_time: '{self.last_commited_word}' at {self.last_commited_time}")
         # print("end flushing")
         # print()
         return commit
@@ -731,7 +746,7 @@ def add_shared_args(parser):
     parser.add_argument('--backend', type=str, default="faster-whisper", choices=["faster-whisper", "whisper_timestamped-openai","transformers", "whisper_timestamped-transformers"],help='Load only this backend for Whisper processing.')
     parser.add_argument('--vad', action='store', default=False, const=True, nargs='?', help='Use VAD = voice activity detection, with the default parameters.')
     parser.add_argument('--buffer_trimming', type=str, default="segment", choices=["sentence", "segment"],help='Buffer trimming strategy -- trim completed sentences marked with punctuation mark and detected by sentence segmenter, or the completed segments returned by Whisper. Sentence segmenter must be installed for "sentence" option.')
-    parser.add_argument('--buffer_trimming_sec', type=float, default=15, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')
+    parser.add_argument('--buffer_trimming_sec', type=float, default=10, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')
 
 
 
