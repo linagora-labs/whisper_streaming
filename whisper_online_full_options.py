@@ -109,7 +109,7 @@ def process_file(audio_path, args, online, processing_times):
 
     min_chunk = args.min_chunk_size
     SAMPLING_RATE = 16000
-    BENCHMARK_MODE = False
+    BENCHMARK_MODE = True
 
     duration = len(whisper_online.load_audio(audio_path))/SAMPLING_RATE
     logger.info("")
@@ -175,6 +175,8 @@ def process_file(audio_path, args, online, processing_times):
     else: # online = simultaneous mode
         processing_times[audio_path]['segment_latency'] = []
         processing_times[audio_path]['segment_start_latency'] = []
+        processing_times[audio_path]['segment_start_buffer_latency'] = []
+        processing_times[audio_path]['segment_buffer_latency'] = []
         end = 0
         
         la3 = []
@@ -217,6 +219,9 @@ def process_file(audio_path, args, online, processing_times):
             if committed[0] is not None:
                 processing_times[audio_path]['segment_latency'].append(now - committed[1])
                 processing_times[audio_path]['segment_start_latency'].append(now - committed[0])
+            if buffer[0] is not None:
+                processing_times[audio_path]['segment_start_buffer_latency'].append(now - buffer[0])
+                processing_times[audio_path]['segment_buffer_latency'].append(now - buffer[1])
             if buffer[0] is not None:
                 if now - buffer[0]>3:
                     la3.append(now - buffer[0])
