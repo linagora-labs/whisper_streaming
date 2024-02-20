@@ -147,3 +147,4 @@ smartphone_/
 punctuations_/
 benchmark_configs.txt
 normal_large_wer/
+*_large*/

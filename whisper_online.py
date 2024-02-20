@@ -6,6 +6,7 @@ import librosa
 import time
 import torch
 import os
+import string 
 
 from functools import lru_cache
 
@@ -194,6 +195,7 @@ class HypothesisBuffer:
 
         self.last_commited_time = 0
         self.last_commited_word = None
+        self.last_buffered_time = -1
 
         self.logfile = logfile
 
@@ -230,18 +232,21 @@ class HypothesisBuffer:
             if len(self.buffer) == 0:
                 break
 
-            if nt == self.buffer[0][2]:
+            if nt.lower().translate(str.maketrans('', '', string.punctuation)) == self.buffer[0][2].lower().translate(str.maketrans('', '', string.punctuation)):                
                 commit.append((na,nb,nt))
                 self.last_commited_word = nt
                 self.last_commited_time = nb
                 self.buffer.pop(0)
                 self.new.pop(0)
             else:
+                # print(f"SStop committing at '{nt}' and '{self.buffer[0][2]}'")
                 break
         self.buffer = self.new
+        new_non_commit = [i for i in self.buffer if i[1] > self.last_buffered_time-0.1]
+        self.last_buffered_time = self.buffer[-1][1] if self.buffer else -1
         self.new = []
         self.commited_in_buffer.extend(commit)
-        return commit
+        return commit, new_non_commit
 
     def pop_commited(self, time):
         while self.commited_in_buffer and self.commited_in_buffer[0][1] <= time:
@@ -318,7 +323,7 @@ class OnlineASRProcessor:
         tsw = self.asr.ts_words(res)
 
         self.transcript_buffer.insert(tsw, self.buffer_time_offset)
-        o = self.transcript_buffer.flush()
+        o, buffer = self.transcript_buffer.flush()
         self.commited.extend(o)
         logger.debug(f">>>>COMPLETE NOW:{self.to_flush(o)}")
         logger.debug(f"INCOMPLETE:{self.to_flush(self.transcript_buffer.complete())}")
@@ -349,7 +354,7 @@ class OnlineASRProcessor:
             #self.chunk_at(t)
 
         logger.debug(f"len of buffer now: {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f}")
-        return self.to_flush(o)
+        return self.to_flush(o), self.to_flush(buffer)
 
     def chunk_completed_sentence(self):
         if self.commited == []: return
@@ -506,23 +511,23 @@ def output_transcript(o, start=None, now=None, logfile=None):
     # output format in stdout is like:
     # 4186.3606 0 1720 Takhle to je
     # - the first three words are:
-    #    - emission time from beginning of processing, in milliseconds
+    #    - emission time from beginning of processing, in seconds
     #    - beg and end timestamp of the text segment, as estimated by Whisper model. The timestamps are not accurate, but they're useful anyway
     # - the next words: segment transcript
     if logfile is None:
         if now is None:
             now = time.time() - start
         if o[0] is not None:
-            logger.info(f"{now*1000:1.4f} {o[0]*1000:1.0f} {o[1]*1000:1.0f} {o[2]}")
+            print(f"{now:1.2f} {o[0]:1.2f} {o[1]:1.2f} {o[2]}")
         else:
-            logger.info(o)
+            print(f"{o}")
     else:
         if isinstance(logfile, str):
             logfile = open(logfile, "w")
         if now is None:
             now = time.time() - start
         if o[0] is not None:
-            logfile.write(f"{now*1000:1.4f} {o[0]*1000:1.0f} {o[1]*1000:1.0f} {o[2]}")
+            logfile.write(f"{now:1.2f} {o[0]:1.2f} {o[1]:1.2f} {o[2]}")
         # else:
         #     print(o, file=logfile, flush=True)
         logfile.close()

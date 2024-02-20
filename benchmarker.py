@@ -5,6 +5,8 @@ from tqdm import tqdm
 LANGUAGE = "fr"
 MIN_CHUNK_SIZE = 2
 BUFFER_TRIMMING_SEC = 15
+# MIN_CHUNK_SIZE = 0.6
+# BUFFER_TRIMMING_SEC = 6
 # GPU_SUPPORTED_PRECISIONS = ["int8," "float32", "float16", "int8-float16"]
 GPU_SUPPORTED_PRECISIONS = ["int8", "float32"]
 
@@ -106,6 +108,7 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                                 if method == "beam-search" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")) and vad=="vad":
                                     f.write(f'{backend}_{test_id}_offline\n')
                                     f.write(f'{backend}_{test_id}_medium\n')
+                                    f.write(f'{backend}_{test_id}_tiny\n')
                                     f.write(f'{backend}_{test_id}_large-v1\n')
 
 
