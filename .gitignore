@@ -147,3 +147,5 @@ smartphone_/
 punctuations_/
 benchmark_configs.txt
 Dockerfile
+normal_large_wer/
+*_large*/

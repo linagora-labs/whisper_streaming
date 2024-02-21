@@ -4,6 +4,12 @@ from tqdm import tqdm
 
 LANGUAGE = "fr"
 MIN_CHUNK_SIZE = 2
+BUFFER_TRIMMING_SEC = 15
+# MIN_CHUNK_SIZE = 0.6
+# BUFFER_TRIMMING_SEC = 6
+# GPU_SUPPORTED_PRECISIONS = ["int8," "float32", "float16", "int8-float16"]
+GPU_SUPPORTED_PRECISIONS = ["int8", "float32"]
+
 
 CONFIG_FILE = "benchmark_configs.txt"
 
@@ -14,7 +20,7 @@ def get_possible_params_faster_whisper(device, small_test):
                 'methods': ["greedy", "beam-search"],
                 } if not small_test else {'precisions': ["int8"], 'vads': ["", "vad"],
                 'methods': ["greedy"]}
-    return {'precisions': ["int8", "float32"],
+    return {'precisions': GPU_SUPPORTED_PRECISIONS,
                 'vads': ["", "vad"],
                 'methods': ["greedy", "beam-search"],
                 } if not small_test else {'precisions': ["int8"], 'vads': ["", "vad"],
@@ -44,12 +50,12 @@ def is_params_valid_faster(device, precision, vad, method, subfolders=False):
             return False
         return True
     else:
-        if precision=="float16" and (method=="beam-search" or vad):
+        if (precision=="float16" or precision=="int8-float16") and (method=="beam-search"):
             return False
         elif precision=="float32" and method=="beam-search":
             return False
         if subfolders:
-            if (precision=="float16" or vad!="vad") and not (method=="beam-search" and precision=="int8" and vad==""):
+            if (precision=="float16") and not (method=="beam-search" and precision=="int8" and vad==""):
                 return False
     return True
 
@@ -64,7 +70,7 @@ def is_params_valid_whisper_timestamped(device, precision, vad, method, subfolde
         if precision=="float16" and (method=="beam-search" or vad):
             return False
         if subfolders:
-            if (precision=="float16" or vad!="vad") and not (method=="beam-search" and precision=="float32" and vad==""):
+            if (precision=="float16") and not (method=="beam-search" and precision=="float32" and vad==""):
                 return False
     return True
 
@@ -87,11 +93,11 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                             test_id += f'_{vad.replace(" ", "-")}'
                         if (backend == "faster-whisper" and is_params_valid_faster(device,precision, vad, method, subfolders)) or (backend.startswith("whisper-timestamped") and is_params_valid_whisper_timestamped(device, precision, vad, method, subfolders)):
                             f.write(f'{backend}_{test_id}\n')
-                            if device=='cpu' and not small_test ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
+                            if device=='cpu' and not small_test and ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
                                 f.write(f'{backend}_{test_id}_2t\n')
                                 f.write(f'{backend}_{test_id}_8t\n')
                                 # f.write(f'{backend}_{test_id}_16t\n')
-                            if device=="cuda" and not small_test and ((backend.startswith("whisper_timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="":
+                            if device=="cuda" and not small_test and ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="vad":
                                 f.write(f'{backend}_{test_id}_previous-text\n')
                             if not subfolders:
                                 if method == "greedy" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")):
@@ -102,46 +108,14 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                                 if method == "beam-search" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")) and vad=="vad":
                                     f.write(f'{backend}_{test_id}_offline\n')
                                     f.write(f'{backend}_{test_id}_medium\n')
+                                    f.write(f'{backend}_{test_id}_tiny\n')
+                                    f.write(f'{backend}_{test_id}_large-v1\n')
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--hardware', type=str, default='koios')
-    parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--data', type=str, default='../data-fr/normal')
-    parser.add_argument('--data_silence', type=str, default='../data-fr/silence')
-    parser.add_argument('--subfolders', type=bool, default=False)
-    parser.add_argument('--model_size', type=str, default='large-v3')
-    parser.add_argument('--force_command', type=bool, default=False)
-    parser.add_argument('--small_test', type=bool, default=True)
-    args = parser.parse_args()
-    hardware = args.hardware
-    device = args.device
-    data = args.data
-    model_size = args.model_size
-    data_silence = args.data_silence
-    subfolder = args.subfolders
-
-
-
-    if hardware == "koios":
-        os.system('export CUDA_DEVICE_ORDER=PCI_BUS_ID')
-        os.system('export CUDA_VISIBLE_DEVICES=1')
-        os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"')
-        # os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"')
-    elif hardware == "biggerboi":
-        os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/speech-army-knife"')      # don't work
-        os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"')
-    else:
-        os.system('export PYTHONPATH="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"')
-        os.system('export PYTHONPATH="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/whisper-timestamped"')
-
-    benchmark_folder = f'{data.split("/")[-1]}_{model_size.split("-")[0]}'
-    output_path = os.path.join(benchmark_folder, hardware, device)
+def run_commands(hardware, device, data, model_size, subfolder, args):
+    benchmark_folder = f'{data.split("/")[-1]}_{model_size.split("-")[0]}{"_wer" if subfolder else ""}'
+    output_path = os.path.join(benchmark_folder, hardware, device if device != "cuda" else "gpu")
     os.makedirs(output_path, exist_ok=True)
-
-    if not os.path.exists(CONFIG_FILE):
-        generate_test(device, CONFIG_FILE, subfolder, small_test=args.small_test)
     pbar = tqdm(total=sum(1 for line in open(CONFIG_FILE, "r") if not line.startswith("#")))
     with open(CONFIG_FILE, "r") as f:
         for line in f.readlines():
@@ -164,14 +138,21 @@ if __name__ == '__main__':
                     command += f'python whisper_online_full_options.py {data_silence} '
                 else:
                     command += f'python whisper_online_full_options.py {data} '
-                command += f'--language {LANGUAGE} --model {model_size if not "medium" in params else "medium"} --min-chunk-size {MIN_CHUNK_SIZE} --task transcribe --device {device} --backend {backend} --compute_type {params[1]} --method {params[2]} --output_path {sub_path}'
+                model = model_size
+                if "medium" in params:
+                    model="medium"
+                elif "large-v1" in params:
+                    model="large-v1"
+                elif "tiny" in params:
+                    model="tiny"
+                command += f'--language {LANGUAGE} --model {model} --min-chunk-size {MIN_CHUNK_SIZE} --buffer_trimming_sec {BUFFER_TRIMMING_SEC} --task transcribe --device {device} --backend {backend} --compute_type {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
                 if subfolder:
                     command += f' --subfolders'
                 tmp = [i for i in params if i.startswith('vad')]
                 if tmp:
                     command += f' --{tmp[0].replace("-", " ")}'
                 if "previous-text" in params:
-                    command += f' --previous-text'
+                    command += f' --previous_text'
                 if "offline" in params:
                     command += f' --offline'
                 tmp = [i for i in params if i[-1]=="t" and len(i)<=3 and i[0].isdigit()]
@@ -180,3 +161,44 @@ if __name__ == '__main__':
                 print("Running:\n",command)
                 os.system(command)
                 pbar.update(1)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--hardware', type=str, default='koios')
+    parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--data', type=str, default='../data-fr/normal')
+    parser.add_argument('--data_silence', type=str, default='../data-fr/silence')
+    parser.add_argument('--subfolders', action="store_true", default=False)
+    parser.add_argument('--model_size', type=str, default='large-v3')
+    parser.add_argument('--force_command', action="store_true", default=False)
+    parser.add_argument('--small_test', action="store_true", default=False)
+    args = parser.parse_args()
+    hardware = args.hardware
+    device = args.device
+    data = args.data
+    model_size = args.model_size
+    data_silence = args.data_silence
+    subfolder = args.subfolders
+
+
+    if hardware == "koios":
+        os.environ['CUDA_DEVICE_ORDER']='PCI_BUS_ID'
+        os.environ['CUDA_VISIBLE_DEVICES']="1"
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/home/abert/abert/speech-army-knife"
+        # os.system('export PYTHONPATH="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"')
+    elif hardware == "biggerboi":
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/home/abert/abert/speech-army-knife"      # don't work
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/home/abert/abert/whisper-timestamped"
+    elif hardware == "lenovo":
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/speech-army-knife"
+        os.environ['PYTHONPATH']="${PYTHONPATH}:/mnt/c/Users/berta/Documents/Linagora/whisper-timestamped"
+    else:
+        i = input("Hardware not recognized, continue? (y/n) ")
+        if i.lower() != "y":
+            raise ValueError("Hardware not recognized")
+    with open("log.txt", "w") as f:
+        f.write(f'')
+    if not os.path.exists(CONFIG_FILE):
+        generate_test(device, CONFIG_FILE, subfolder, small_test=args.small_test)
+    run_commands(hardware, device, data, model_size, subfolder, args)
