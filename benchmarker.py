@@ -7,7 +7,7 @@ MIN_CHUNK_SIZE = 2
 BUFFER_TRIMMING_SEC = 15
 # MIN_CHUNK_SIZE = 0.6
 # BUFFER_TRIMMING_SEC = 6
-# GPU_SUPPORTED_PRECISIONS = ["int8," "float32", "float16", "int8-float16"]
+# GPU_SUPPORTED_PRECISIONS = ["int8","float32", "float16", "int8-float16"]
 GPU_SUPPORTED_PRECISIONS = ["int8", "float32"]
 
 
@@ -104,6 +104,10 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                                     if small_test and vad=="":
                                         continue
                                     f.write(f'{backend}_{test_id}_silence\n')
+                                    if vad=="":
+                                        f.write(f'{backend}_{test_id}_bts-7\n')
+                                        f.write(f'{backend}_{test_id}_mcs-0.6\n')
+                                        f.write(f'{backend}_{test_id}_bts-7_mcs-0.6\n')
                             else:
                                 if method == "beam-search" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")) and vad=="vad":
                                     f.write(f'{backend}_{test_id}_offline\n')
@@ -145,7 +149,11 @@ def run_commands(hardware, device, data, model_size, subfolder, args):
                     model="large-v1"
                 elif "tiny" in params:
                     model="tiny"
-                command += f'--language {LANGUAGE} --model {model} --min-chunk-size {MIN_CHUNK_SIZE} --buffer_trimming_sec {BUFFER_TRIMMING_SEC} --task transcribe --device {device} --backend {backend} --compute_type {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
+                tmp = [i for i in params if i.startswith('mcs')]
+                min_chunk_size = tmp[0].split("-")[1] if tmp else MIN_CHUNK_SIZE
+                tmp = [i for i in params if i.startswith('bts')]
+                buffer_trimming_sec = tmp[0].split("-")[1] if tmp else BUFFER_TRIMMING_SEC
+                command += f'--language {LANGUAGE} --model {model} --min-chunk-size {min_chunk_size} --buffer_trimming_sec {buffer_trimming_sec} --task transcribe --device {device} --backend {backend} --compute_type {params[1].replace("-", "_")} --method {params[2]} --output_path {sub_path}'
                 if subfolder:
                     command += f' --subfolders'
                 tmp = [i for i in params if i.startswith('vad')]

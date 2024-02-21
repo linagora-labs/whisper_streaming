@@ -293,14 +293,15 @@ def load_data(data_path, truth_path):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--data_path', type=str, default='../faster_n_openai/normal_large')
-    parser.add_argument('--data_path', type=str, default='../faster_n_openai/normal_large_wer')
+    parser.add_argument('--data_path', type=str, default='../results/wstart/normal_large')
+    # parser.add_argument('--data_path', type=str, default='../faster_n_openai/normal_large_wer')
     parser.add_argument('--ground_truth', type=str, default='../ground_truths')
+    parser.add_argument('--wer', type=bool, default=False)
     args = parser.parse_args()
 
     data_path = args.data_path
 
     data = load_data(data_path, args.ground_truth)
     os.makedirs('plots', exist_ok=True)
-    plot(data, wer=True)
+    plot(data, wer=args.wer)
 
