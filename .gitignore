@@ -146,3 +146,4 @@ normal_wer_large/
 smartphone_/
 punctuations_/
 benchmark_configs.txt
+Dockerfile
