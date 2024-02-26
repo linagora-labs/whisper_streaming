@@ -114,6 +114,13 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                                     f.write(f'{backend}_{test_id}_medium\n')
                                     f.write(f'{backend}_{test_id}_tiny\n')
                                     f.write(f'{backend}_{test_id}_large-v1\n')
+                                    f.write(f'{backend}_{test_id}_bts-7_mcs-0.6\n')
+        if subfolders:
+            f.write(f'whisper-timestamped-openai_float32_greedy_model-bofenghuang/whisper-large-v3-french_offline')
+            f.write(f'whisper-timestamped-openai_float32_greedy_model-bofenghuang/whisper-large-v3-french-distil-dec16_offline')
+            f.write(f'whisper-timestamped-openai_float32_greedy_model-bofenghuang/whisper-large-v3-french-distil-dec8_offline')
+            f.write(f'whisper-timestamped-openai_float32_greedy_model-bofenghuang/whisper-large-v3-french-distil-dec4_offline')
+            f.write(f'whisper-timestamped-openai_float32_greedy_model-bofenghuang/whisper-large-v3-french-distil-dec2_offline')
 
 
 def run_commands(hardware, device, data, model_size, subfolder, args):
@@ -149,6 +156,8 @@ def run_commands(hardware, device, data, model_size, subfolder, args):
                     model="large-v1"
                 elif "tiny" in params:
                     model="tiny"
+                elif len([x for x in params if x.startswith('model-')])>0:
+                    model = [x for x in params if x.startswith('model-')][0].split("-",1)[1]
                 tmp = [i for i in params if i.startswith('mcs')]
                 min_chunk_size = tmp[0].split("-")[1] if tmp else MIN_CHUNK_SIZE
                 tmp = [i for i in params if i.startswith('bts')]
