@@ -28,11 +28,21 @@ def search_row(data, hardware, device, backend, compute_type, vad, method):
             return row
     return None
 
-def search_rows(data, hardware=None, device=None, backend=None, compute_type=None, vad=None, method=None, condition_on_previous_text=None, data_type=None, cpu_threads=None, model_size=None, offline=None):
+def search_rows(data, hardware=None, device=None, backend=None, compute_type=None, \
+    vad=None, method=None, condition_on_previous_text=None, buffer_trimming=None, min_chunk_size=None, \
+    data_type=None, cpu_threads=None, model_size=None, offline=None):
     rows = []
     for row in data:
-        if (hardware is None or row['hardware'] == hardware) and (model_size is None or row['model_size']==model_size) and (offline is None or row['offline']==offline) and (cpu_threads is None or row['cpu_threads']==cpu_threads) and (data_type is None or row['data_type']==data_type) and (condition_on_previous_text is None or row['condition_on_previous_text']==condition_on_previous_text) and (device is None or row['device'] == device) and (backend is None or row['backend'] == backend) and ((compute_type is None or row['compute_type'] == compute_type) or (compute_type=="best" and row['compute_type']=="int8" and row['backend']=="faster") or (compute_type=="best" and row['compute_type']=="float32" and row['backend']=="timestamped")) and (vad is None or row['vad'] == vad) and (method is None or row['method'] == method):
+        if (hardware is None or row['hardware'] == hardware) and (model_size is None or row['model_size']==model_size) and \
+            (offline is None or row['offline']==offline) and (cpu_threads is None or row['cpu_threads']==cpu_threads) and \
+            (data_type is None or row['data_type']==data_type) and (condition_on_previous_text is None or row['condition_on_previous_text']==condition_on_previous_text) \
+            and (device is None or row['device'] == device) and (backend is None or row['backend'] == backend) and \
+            ((compute_type is None or row['compute_type'] == compute_type) or (compute_type=="best" and row['compute_type']=="int8" and row['backend']=="faster") or \
+            (compute_type=="best" and row['compute_type']=="float32" and row['backend']=="timestamped")) and (vad is None or row['vad'] == vad) and \
+            (method is None or row['method'] == method) and (buffer_trimming is None or row['buffer_trimming'] == buffer_trimming) and \
+            (min_chunk_size is None or row['min_chunk_size'] == min_chunk_size):
             rows.append(row)
+                
     return rows
 
 def search_rows_by_key(data, key, value):
@@ -127,6 +137,11 @@ def plot(data, wer=False):
         plot_param(data_gpu, title="VRAM usage depending on precision on 1080TI (GPU) for faster-whisper", key='max_vram',output_path='plots/gpu/koios/faster', hardware="koios", device="gpu", backend="faster", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", plot_data_mode='max', condition_on_previous_text="NoCondition", data_type="speech")
         plot_param(data_gpu, title="VRAM usage depending on precision on 1080TI (GPU) for whisper-timestamped", key='max_vram',output_path='plots/gpu/koios/timestamped', hardware="koios", device="gpu", backend="timestamped", method="greedy", vad='NoVAD', ylabel="VRAM usage [MB]", plot_data_mode='max', condition_on_previous_text="NoCondition", data_type="speech")
         
+        plot_param(data_gpu, title="Last confirmed word latency depending on segments (GPU)", key='segment_latency', ylabel="Latency [s]", plot_data_mode='all', output_path='plots/gpu/koios', hardware="koios", device="gpu", backend=None, buffer_trimming=None, min_chunk_size=None, method="greedy", vad="NoVAD",condition_on_previous_text="NoCondition", data_type="speech", compute_type="int8")
+        plot_param(data_gpu, title="First confirmed word latency depending on segments (GPU)", key='segment_start_latency', ylabel="Latency [s]", plot_data_mode='all', output_path='plots/gpu/koios', hardware="koios", device="gpu", backend=None, buffer_trimming=None, min_chunk_size=None, method="greedy", vad="NoVAD",condition_on_previous_text="NoCondition", data_type="speech", compute_type="int8")
+        plot_param(data_gpu, title="Last buffered word latency depending on segments (GPU)", key='segment_buffer_latency', ylabel="Latency [s]", plot_data_mode='all', output_path='plots/gpu/koios', hardware="koios", device="gpu", backend=None, buffer_trimming=None, min_chunk_size=None, method="greedy", vad="NoVAD",condition_on_previous_text="NoCondition", data_type="speech", compute_type="int8")
+        plot_param(data_gpu, title="First buffered word latency depending on segments (GPU)", key='segment_start_buffer_latency', ylabel="Latency [s]", plot_data_mode='all', output_path='plots/gpu/koios', hardware="koios", device="gpu", backend=None, buffer_trimming=None, min_chunk_size=None, method="greedy", vad="NoVAD",condition_on_previous_text="NoCondition", data_type="speech", compute_type="int8")
+
 
         data_cpu = search_rows_by_key(data, 'device', 'cpu')
         plot_param(data_cpu, title="Latency depending on precision on CPU for faster-whisper", key='segment_latency', output_path='plots/cpu/biggerboi/faster', hardware="biggerboi", device="cpu", backend="faster", method="greedy", vad='NoVAD', data_type="speech", condition_on_previous_text="NoCondition", cpu_threads="4t")
@@ -154,11 +169,18 @@ def plot(data, wer=False):
 
         plot_param(data_gpu, title="Latency depending on VAD on 4090", key='segment_latency', output_path='plots/gpu/lenovo', hardware="lenovo", device="gpu", backend=None, method="greedy", vad=None, condition_on_previous_text="NoCondition", data_type="speech", compute_type="best", offline="streaming", model_size="large")
         plot_param(data_gpu, title="Latency depending on VAD on 4090 on silence data", key='segment_latency', output_path='plots/gpu/lenovo', hardware="lenovo", device="gpu", backend=None, method="greedy", vad=None, condition_on_previous_text="NoCondition", data_type="silence", compute_type="best", offline="streaming", model_size="large")
+        
+        plot_param(data_gpu, title="Last confirmed word latency depending on segments (GPU)", key='segment_latency', ylabel="Latency [s]", plot_data_mode='all', output_path='plots/gpu/lenovo', hardware="lenovo", device="gpu", backend="faster", buffer_trimming=None, min_chunk_size=None, method="greedy", vad="NoVAD",condition_on_previous_text="NoCondition", data_type="speech", compute_type="int8")
+        plot_param(data_gpu, title="First confirmed word latency depending on segments (GPU)", key='segment_start_latency', ylabel="Latency [s]", plot_data_mode='all', output_path='plots/gpu/lenovo', hardware="lenovo", device="gpu", backend="faster", buffer_trimming=None, min_chunk_size=None, method="greedy", vad="NoVAD",condition_on_previous_text="NoCondition", data_type="speech", compute_type="int8")
+        plot_param(data_gpu, title="Last buffered word latency depending on segments (GPU)", key='segment_buffer_latency', ylabel="Latency [s]", plot_data_mode='all', output_path='plots/gpu/lenovo', hardware="lenovo", device="gpu", backend="faster", buffer_trimming=None, min_chunk_size=None, method="greedy", vad="NoVAD",condition_on_previous_text="NoCondition", data_type="speech", compute_type="int8")
+        plot_param(data_gpu, title="First buffered word latency depending on segments (GPU)", key='segment_start_buffer_latency', ylabel="Latency [s]", plot_data_mode='all', output_path='plots/gpu/lenovo', hardware="lenovo", device="gpu", backend="faster", buffer_trimming=None, min_chunk_size=None, method="greedy", vad="NoVAD",condition_on_previous_text="NoCondition", data_type="speech", compute_type="int8")
 
         # plot_param(data_gpu, title="Latency depending Previous text on 4090", key='segment_latency', output_path='plots/gpu/lenovo', hardware="lenovo", device="gpu", backend=None, method="greedy", vad="NoVAD", condition_on_previous_text=None, compute_type="best", data_type="speech")
 
 
-def plot_param(data, title="Latency", key='segment_latency', output_path='plots', ylabel='Latency [s]', plot_data_mode='all', hardware=None, device=None, backend=None, compute_type=None, method=None, vad=None, condition_on_previous_text=None, data_type=None, cpu_threads=None, offline="streaming", model_size="large-v3"):
+def plot_param(data, title="Latency", key='segment_latency', output_path='plots', ylabel='Latency [s]', plot_data_mode='all', \
+    hardware=None, device=None, backend=None, compute_type=None, method=None, vad=None, condition_on_previous_text=None, data_type=None, \
+    cpu_threads=None, offline="streaming", model_size="large-v3", buffer_trimming="15", min_chunk_size="2"):
     os.makedirs(output_path, exist_ok=True)
     description = [f"hardware: {hardware}" if hardware is not None else ""]
     description.append(f"device: {device}" if device is not None else "")
@@ -173,6 +195,8 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
         description.append(f"condition_on_previous_text: False" if condition_on_previous_text=="NoCondition" else "condition_on_previous_text: True")
     description.append(f"{offline}" if offline is not None else "")
     description.append(f"model_size: {model_size}" if model_size is not None else "")
+    description.append(f"buffer_trimming: {buffer_trimming}" if buffer_trimming is not None else "")
+    description.append(f"min_chunk_size: {min_chunk_size}" if min_chunk_size is not None else "")
     description = [x for x in description if x != ""]
     if len(description) > 3:
         description[3] = "\n" + description[3]
@@ -180,9 +204,11 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
         description[6] = "\n" + description[6]
     description = ', '.join(description)
     # plt.rcParams["figure.figsize"] = (12,10)
-    data = search_rows(data, hardware=hardware, device=device, backend=backend, compute_type=compute_type, method=method, vad=vad, condition_on_previous_text=condition_on_previous_text, data_type=data_type, cpu_threads=cpu_threads, offline=offline, model_size=model_size)
+    data = search_rows(data, hardware=hardware, device=device, backend=backend, compute_type=compute_type, min_chunk_size=min_chunk_size, \
+        method=method, vad=vad, condition_on_previous_text=condition_on_previous_text, buffer_trimming=buffer_trimming, \
+        data_type=data_type, cpu_threads=cpu_threads, offline=offline, model_size=model_size)
     if len(data) == 0:
-        print(f"No data for {description}")
+        print(f"No data for '{title}' with : {description}".replace("\n", ""))
         return
     fig, ax = plt.subplots()    
     plot_values= []
@@ -201,6 +227,8 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
         name += f"{row['data_type']}_" if data_type is None else ""
         name += f"{row['model_size']}_" if model_size is None else ""
         name += f"{row['offline']}_" if offline is None else ""
+        name += f"buffer-trimming:{row['buffer_trimming']}_" if buffer_trimming is None else ""
+        name += f"min-chunk-size:{row['min_chunk_size']}_" if min_chunk_size is None else ""
         if device == "cpu":
             name += f"{row['cpu_threads']}_" if cpu_threads is None else ""
         name = name[:-1]
@@ -213,7 +241,7 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
         for i, v in enumerate(plot_values):
             ax.text(i, v, f"{v:.0f}", color='black', ha='center', va='bottom')
     elif plot_data_mode == 'all' or plot_data_mode == 'rtf':
-        ax.violinplot(plot_values, showmedians=True, quantiles=[[0.25, 0.75] for i in range(len(plot_values))], showextrema=False)
+        ax.violinplot(plot_values, showmedians=True, quantiles=[[0.25, 0.75] for i in range(len(plot_values))], showextrema=True)
         ax.set_xticks([y + 1 for y in range(len(plot_names))], labels=plot_names)
     if key=="wer_score":
         ax.set_ylim([0, 100])
@@ -245,8 +273,8 @@ def load_data(data_path, truth_path):
             for backend in backends:
                 execs = os.listdir(os.path.join(data_path, hardware, device, backend))
                 execs = [x for x in execs if not os.path.isfile(os.path.join(data_path, hardware, device, backend, x))]
-                params = [x.split('.')[0] for x in execs]
-                params = [x.split('_') for x in params]
+                # params = [x.split('.')[0] for x in execs]
+                params = [x.split('_') for x in execs]
                 compute_types = [x[0] for x in params]
                 data_types = ["silence" if "silence" in x else "speech" for x in params]
                 vads = []
@@ -261,6 +289,11 @@ def load_data(data_path, truth_path):
                 methods = ["beam-search" if ("beam-search" in x or "beam" in x) else "greedy" for x in params]
                 condition_on_previous_text = ["ConditionOnPreviousText" if "previous-text" in x else "NoCondition" for x in params]
                 threads = [list({'2t', '4t', '8t', '16t'} & set(x)) for x in params]
+                threads = [x[0] if x else "4t" for x in threads]
+                bts = [list({'bts-7', 'bts-5', 'bts-6', 'bts-10', 'bts-12', 'bts-15'} & set(x)) for x in params]
+                bts = [x[0].split("-")[1] if x else "15" for x in bts]
+                mcs = [list({'mcs-0.6', 'mcs-0', 'mcs-2', 'mcs-1', 'mcs-0.8', 'mcs-1.5'} & set(x)) for x in params]
+                mcs = [x[0].split("-")[1] if x else "2" for x in mcs]
                 model_sizes = []
                 for x in params:
                     added=False
@@ -272,8 +305,8 @@ def load_data(data_path, truth_path):
                         model_sizes.append("large-v3")
                 offlines = ["offline" if "offline" in x else "streaming" for x in params]
                 for i, exec in enumerate(execs):
-                    if os.path.exists(os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'result.json')):
-                        with open(os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'result.json'), 'r') as f:
+                    if os.path.exists(os.path.join(data_path, hardware, device, backend, exec, 'result.json')):
+                        with open(os.path.join(data_path, hardware, device, backend, exec, 'result.json'), 'r') as f:
                             raw_data = json.load(f)
                             if device == "cpu":
                                 for j in raw_data.keys():
@@ -282,8 +315,10 @@ def load_data(data_path, truth_path):
                                 file_id = os.path.basename(j).split('.')[0]
                                 wer = process_wer(os.path.join(truth_path, file_id + '.txt'), os.path.join(data_path, hardware, device, backend, exec.split('.')[0], 'transcripts', file_id), exec.split('.')[0]+"_"+file_id)
                                 raw_data[j]['wer_score'] = wer['wer'] if wer else None
-                            data.append({'hardware': hardware,'device': device, "offline": offlines[i], "model_size": model_sizes[i], 'cpu_threads': threads[i][0] if threads[i] else '4t', 'data_type':data_types[i], 'condition_on_previous_text': condition_on_previous_text[i], 'backend': "faster" if backend=="faster-whisper" or backend=="faster" else "timestamped", 'compute_type': compute_types[i], 'vad': vads[i], 'method': methods[i], 
-                                            'data': raw_data})
+                            data.append({'hardware': hardware,'device': device, "offline": offlines[i], 'buffer_trimming': bts[i], 'min_chunk_size': mcs[i] ,"model_size": model_sizes[i], \
+                                'cpu_threads': threads[i], 'data_type':data_types[i], 'condition_on_previous_text': condition_on_previous_text[i], \
+                                'backend': "faster" if backend=="faster-whisper" or backend=="faster" else "timestamped", \
+                                'compute_type': compute_types[i], 'vad': vads[i], 'method': methods[i], 'data': raw_data})
                     else:
                         print(f"Missing result.json for {os.path.join(data_path, hardware, device, backend, exec.split('.')[0])}")
         pbar.update(1)
@@ -294,6 +329,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path', type=str, default='../results/wstart/normal_large')
+    # parser.add_argument('--data_path', type=str, default='normal_large')
+
     # parser.add_argument('--data_path', type=str, default='../faster_n_openai/normal_large_wer')
     parser.add_argument('--ground_truth', type=str, default='../ground_truths')
     parser.add_argument('--wer', type=bool, default=False)
