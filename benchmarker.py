@@ -34,7 +34,7 @@ def get_possible_params_whisper_timestamped(device, small_test):
                 'methods': ["greedy", "beam-search"],
                 } if not small_test else {'precisions': ["float32"], 'vads': ["", "vad"],
                 'methods': ["greedy"]}
-    return {'precisions': ["float16", "float32"],
+    return {'precisions': ["float32"],
                 'vads': ["", "vad", "vad auditok"],
                 'methods': ["greedy", "beam-search"],
             } if not small_test else {'precisions': ["float32"], 'vads': ["", "vad"],
@@ -97,8 +97,8 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                                 f.write(f'{backend}_{test_id}_2t\n')
                                 f.write(f'{backend}_{test_id}_8t\n')
                                 # f.write(f'{backend}_{test_id}_16t\n')
-                            if device=="cuda" and not small_test and ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="vad":
-                                f.write(f'{backend}_{test_id}_previous-text\n')
+                            # if device=="cuda" and not small_test and ((backend.startswith("whisper-timestamped") and precision=="float32") or (backend=="faster-whisper" and precision=="int8")) and method=="greedy" and vad=="vad":
+                            #     f.write(f'{backend}_{test_id}_previous-text\n')
                             if not subfolders:
                                 if method == "greedy" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")):
                                     if small_test and vad=="":
@@ -114,6 +114,17 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                                     f.write(f'{backend}_{test_id}_medium\n')
                                     f.write(f'{backend}_{test_id}_tiny\n')
                                     f.write(f'{backend}_{test_id}_large-v1\n')
+                                    f.write(f'{backend}_{test_id}_bts-7_mcs-0.6\n')
+                                    f.write(f'{backend}_{test_id}_previous-text\n')
+                                    f.write(f'{backend}_{test_id}_bts-7_mcs-0.6_previous-text\n')
+        suffixe = ""
+        if subfolders:
+            suffixe = "_offline"
+        f.write(f'whisper-timestamped-openai_float32_greedy_model-bofenghuang/whisper-large-v3-french{suffixe}\n')
+        f.write(f'whisper-timestamped-openai_float32_greedy_model-bofenghuang/whisper-large-v3-french-distil-dec16{suffixe}\n')
+        f.write(f'whisper-timestamped-openai_float32_greedy_model-bofenghuang/whisper-large-v3-french-distil-dec8{suffixe}\n')
+        f.write(f'whisper-timestamped-openai_float32_greedy_model-bofenghuang/whisper-large-v3-french-distil-dec4{suffixe}\n')
+        f.write(f'whisper-timestamped-openai_float32_greedy_model-bofenghuang/whisper-large-v3-french-distil-dec2{suffixe}\n')
 
 
 def run_commands(hardware, device, data, model_size, subfolder, args):
@@ -129,7 +140,7 @@ def run_commands(hardware, device, data, model_size, subfolder, args):
                 backend = params[0]
                 if backend.startswith('whisper'):
                     backend = '_'.join(backend.split("-", 1))
-                sub_path = os.path.join(output_path, backend, '_'.join(params[1:]))
+                sub_path = os.path.join(output_path, backend, '_'.join(params[1:]).replace('/','-'))
                 if os.path.exists(os.path.join(sub_path, "result.json")) and not args.force_command:
                     print(f'Skipping {sub_path}')
                     pbar.update(1)
@@ -149,6 +160,8 @@ def run_commands(hardware, device, data, model_size, subfolder, args):
                     model="large-v1"
                 elif "tiny" in params:
                     model="tiny"
+                elif len([x for x in params if x.startswith('model-')])>0:
+                    model = [x for x in params if x.startswith('model-')][0].split("-",1)[1]
                 tmp = [i for i in params if i.startswith('mcs')]
                 min_chunk_size = tmp[0].split("-")[1] if tmp else MIN_CHUNK_SIZE
                 tmp = [i for i in params if i.startswith('bts')]

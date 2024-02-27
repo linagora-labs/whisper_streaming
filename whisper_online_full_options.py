@@ -126,13 +126,14 @@ def process_file(audio_path, args, online, processing_times):
         a = whisper_online.load_audio(audio_path)
         online.insert_audio_chunk(a)
         try:
-            o = online.process_iter()
+            _, o = online.process_iter()
             end_time = time.time()
         except AssertionError:
             logger.info("assertion error")
             pass
         else:
-            whisper_online.output_transcript(o, start)
+            if not BENCHMARK_MODE:
+                whisper_online.output_transcript(o, start)
             transcripts.append(o)
         processing_times[audio_path]['segment_duration'].append(duration)
         processing_times[audio_path]['segment_timestamps'].append((0,duration))
@@ -148,13 +149,14 @@ def process_file(audio_path, args, online, processing_times):
             a = whisper_online.load_audio_chunk(audio_path,beg,end)
             online.insert_audio_chunk(a)
             try:
-                o = online.process_iter()
+                _, o = online.process_iter()
                 end_time = time.time()
             except AssertionError:
                 logger.info("assertion error")
                 pass
             else:
-                whisper_online.output_transcript(o, start, now=end)
+                if not BENCHMARK_MODE:
+                    whisper_online.output_transcript(o, start, now=end)
                 transcripts.append(o)
             logger.debug(f"## last processed {end:.2f}s")
             processing_times[audio_path]['segment_duration'].append(end-beg)
