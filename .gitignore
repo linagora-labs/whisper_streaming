@@ -149,3 +149,4 @@ benchmark_configs.txt
 Dockerfile
 normal_large_wer/
 *_large*/
+benchmark_configs_gpu.txt

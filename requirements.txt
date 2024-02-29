@@ -3,3 +3,6 @@ torchaudio
 librosa
 soundfile
 faster-whisper
+tqdm
+py3nvml
+psutil
