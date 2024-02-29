@@ -109,11 +109,11 @@ def generate_test(device, file="benchmark_configs.txt", subfolders=False, small_
                                         f.write(f'{backend}_{test_id}_mcs-0.6\n')
                                         f.write(f'{backend}_{test_id}_bts-7_mcs-0.6\n')
                             else:
-                                if method == "beam-search" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")) and vad=="vad":
+                                if method == "greedy" and ((precision == "int8" and backend == "faster-whisper") or (backend.startswith("whisper-timestamped") and precision=="float32")) and vad=="":
                                     f.write(f'{backend}_{test_id}_offline\n')
-                                    f.write(f'{backend}_{test_id}_medium\n')
-                                    f.write(f'{backend}_{test_id}_tiny\n')
-                                    f.write(f'{backend}_{test_id}_large-v1\n')
+                                    f.write(f'{backend}_{test_id}_medium_offline\n')
+                                    f.write(f'{backend}_{test_id}_tiny_offline\n')
+                                    f.write(f'{backend}_{test_id}_large-v1_offline\n')
                                     f.write(f'{backend}_{test_id}_bts-7_mcs-0.6\n')
                                     f.write(f'{backend}_{test_id}_previous-text\n')
                                     f.write(f'{backend}_{test_id}_bts-7_mcs-0.6_previous-text\n')
