@@ -128,17 +128,19 @@ def process_file(audio_path, args, online, processing_times):
         try:
             _, o = online.process_iter()
             end_time = time.time()
-        except AssertionError:
-            logger.info("assertion error")
+        except AssertionError as e:
+            logger.info("assertion error on {audio_path}")
+            print(e)
+            del processing_times[audio_path]
             pass
         else:
             if not BENCHMARK_MODE:
                 whisper_online.output_transcript(o, start)
             transcripts.append(o)
-        processing_times[audio_path]['segment_duration'].append(duration)
-        processing_times[audio_path]['segment_timestamps'].append((0,duration))
-        processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
-        logger.info(f"Finished processing {audio_path} in {end_time-start_time:.2f}s")
+            processing_times[audio_path]['segment_duration'].append(duration)
+            processing_times[audio_path]['segment_timestamps'].append((0,duration))
+            processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
+            logger.info(f"Finished processing {audio_path} in {end_time-start_time:.2f}s")
         now = None
     elif args.comp_unaware:  # computational unaware mode 
         end = beg + min_chunk
