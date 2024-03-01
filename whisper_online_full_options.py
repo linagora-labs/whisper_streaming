@@ -136,7 +136,6 @@ def process_file(audio_path, args, online, processing_times):
         else:
             if not BENCHMARK_MODE:
                 whisper_online.output_transcript(o, start)
-            transcripts.append(o)
             processing_times[audio_path]['segment_duration'].append(duration)
             processing_times[audio_path]['segment_timestamps'].append((0,duration))
             processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
@@ -159,7 +158,6 @@ def process_file(audio_path, args, online, processing_times):
             else:
                 if not BENCHMARK_MODE:
                     whisper_online.output_transcript(o, start, now=end)
-                transcripts.append(o)
             logger.debug(f"## last processed {end:.2f}s")
             processing_times[audio_path]['segment_duration'].append(end-beg)
             processing_times[audio_path]['segment_timestamps'].append((beg,end))
