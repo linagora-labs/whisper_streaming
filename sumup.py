@@ -104,16 +104,15 @@ def get_values(row, key='segment_latency', mode='max'):
 def plot(data, wer=False):
     if wer:
         print("Plotting WER")
-        plot_param(data, title="WER streaming vs offline", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="VAD",method="beam-search", condition_on_previous_text="NoCondition", data_type="speech", model_size="large-v3", offline=None,  compute_type="best")
-        plot_param(data, title="WER model size", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="VAD",method="beam-search", condition_on_previous_text="NoCondition", data_type="speech", model_size=None, offline="streaming", compute_type="best")
         plot_param(data, title="WER depending on precision on 1080TI (GPU) for faster-whisper", ylabel="WER", key='wer_score', output_path='plots/wer/faster', hardware="koios", device="gpu", backend="faster", method="greedy", vad='NoVAD', condition_on_previous_text="NoCondition", data_type="speech", compute_type=None)
         plot_param(data, title="WER depending on precision on 1080TI (GPU)", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", backend=None, method="greedy", vad='NoVAD', condition_on_previous_text="NoCondition", data_type="speech", compute_type=None)
         plot_param(data, title="WER depending on method on 1080TI (GPU)", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", backend=None, method=None, vad='NoVAD', condition_on_previous_text="NoCondition", data_type="speech", compute_type="best")
         plot_param(data, title="WER depending on method with VAD on 1080TI (GPU)", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", backend=None, method=None, vad='VAD', condition_on_previous_text="NoCondition", data_type="speech", compute_type="best")
         plot_param(data, title="WER depending on VAD on 1080TI (GPU)", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", backend=None, method="greedy", vad=None, condition_on_previous_text="NoCondition", data_type="speech", compute_type="best")
         plot_param(data, title="WER depending on Previous text on 1080TI (GPU)", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", backend=None, method="greedy", vad="VAD", condition_on_previous_text=None, data_type="speech", compute_type="best")
-        plot_param(data, title="WER model", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="NoVAD",method="greedy", condition_on_previous_text="NoCondition", data_type="speech", model_size=None, offline="offline", compute_type="best")
-
+        plot_param(data, title="WER streaming vs offline", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="NoVAD",method="greedy", condition_on_previous_text="NoCondition", data_type="speech", model_size="large-v3", offline=None,  compute_type="best")
+        plot_param(data, title="WER model size streaming", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="NoVAD",method="greedy", condition_on_previous_text="NoCondition", data_type="speech", model_size=None, offline="streaming", compute_type="best")
+        plot_param(data, title="WER model offline", ylabel="WER", key='wer_score', output_path='plots/wer/', hardware="koios", device="gpu", vad="NoVAD",method="greedy", condition_on_previous_text="NoCondition", data_type="speech", model_size=None, offline="offline", compute_type="best")
 
     
     
@@ -221,6 +220,7 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
     fig, ax = plt.subplots()    
     plot_values= []
     plot_names = []
+    longest_name = ""
     for row in data:
         m = get_values(row, key=key, mode=plot_data_mode)
         plot_values.append(m)
@@ -233,13 +233,22 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
         name += f"{row['vad']}_" if vad is None else ""
         name += f"{row['condition_on_previous_text']}_" if condition_on_previous_text is None else ""
         name += f"{row['data_type']}_" if data_type is None else ""
-        name += f"{row['model_size']}_" if model_size is None else ""
+        model = row['model_size'].replace('model-','').replace('whisper-','')
+        if len(model) > 20:
+            model = model.split("-",1)[1]
+        name += f"{model}_" if model_size is None else ""
         name += f"{row['offline']}_" if offline is None else ""
         name += f"buffer-trimming:{row['buffer_trimming']}_" if buffer_trimming is None else ""
         name += f"min-chunk-size:{row['min_chunk_size']}_" if min_chunk_size is None else ""
         if device == "cpu":
             name += f"{row['cpu_threads']}_" if cpu_threads is None else ""
         name = name[:-1]
+        if len(name) > len(longest_name):
+            longest_name = name
+        if len(name) >= 40:
+            name = name.split("_")
+            mid = len(name)//2
+            name = "_".join(name[:mid]) + "_\n" + "_".join(name[mid:])
         plot_names.append(name)
     if plot_data_mode == 'max':
         ax.bar(plot_names, plot_values)
@@ -254,7 +263,10 @@ def plot_param(data, title="Latency", key='segment_latency', output_path='plots'
     if key=="wer_score":
         ax.set_ylim([0, 100])
     ax.set_xlabel(description)
-    plt.xticks(rotation=25)
+    if len(longest_name) >= 40:
+        plt.xticks(rotation=60)
+    else:
+        plt.xticks(rotation=25)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
     # plt.ylim(bottom=0)
