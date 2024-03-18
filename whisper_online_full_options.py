@@ -89,12 +89,24 @@ def export_transcipt(transcripts, file=None):
     if isinstance(file, str):
         f.close()
 
-def output_streaming(out, out_time=0, commit=False, buffered_time=None):
+def output_streaming(committed, newbuffer):
+    # print(committed)
+    # print(newbuffer)
+    # print()
+    text = committed
+    text += newbuffer[2] if newbuffer[0] is not None else ""
+    text = text.replace(".", ".\n")
+    # print(text, end="\r", flush=True)
+    with open("streaming.txt", "w") as f:
+        f.write(text)
+
+
+def output_timed(out, out_time=0, commit=False, buffered_time=None):
     if out[0] is not None:
         if commit:
-            print(f"{buffered_time:6.2f} {out_time:6.2f} {out[0]:6.2f} {out[1]:6.2f} {out[2]:<100}", flush=True)
+            print(f"{buffered_time:6.2f} {out_time:6.2f} {out[0]:6.2f} {out[1]:6.2f} (slat={buffered_time-out[0]:.2f}s) {out[2]:<120}", flush=True)
         else:
-            print(f"{out_time:6.2f} {0:6.2f} {out[0]:6.2f} {out[1]:6.2f} {out[2]}", end="\r", flush=True)
+            print(f"{out_time:6.2f} {0:6.2f} {out[0]:6.2f} {out[1]:6.2f} (slat={out_time-out[0]:.2f}s) {out[2]:<100}", end="\r", flush=True)
     else:
         if commit:
             print(f"{out_time:6.2f} {'':<120}", flush=True)
@@ -109,7 +121,9 @@ def process_file(audio_path, args, online, processing_times):
 
     min_chunk = args.min_chunk_size
     SAMPLING_RATE = 16000
-    BENCHMARK_MODE = True
+    MODE = "streaming" #benchmark, timed, streaming
+    if MODE=="streaming":
+        confirmed_transcription = ""
 
     duration = len(whisper_online.load_audio(audio_path))/SAMPLING_RATE
     logger.info("")
@@ -134,7 +148,7 @@ def process_file(audio_path, args, online, processing_times):
             del processing_times[audio_path]
             pass
         else:
-            if not BENCHMARK_MODE:
+            if MODE!="benchmark":
                 whisper_online.output_transcript(o, start)
             processing_times[audio_path]['segment_duration'].append(duration)
             processing_times[audio_path]['segment_timestamps'].append((0,duration))
@@ -143,7 +157,7 @@ def process_file(audio_path, args, online, processing_times):
         now = None
     elif args.comp_unaware:  # computational unaware mode 
         end = beg + min_chunk
-        if BENCHMARK_MODE:
+        if MODE=="benchmark":
             pbar = tqdm(total=round(duration,3))
         while True:
             start_time = time.time()
@@ -156,13 +170,13 @@ def process_file(audio_path, args, online, processing_times):
                 logger.info("assertion error")
                 pass
             else:
-                if not BENCHMARK_MODE:
+                if MODE!="benchmark":
                     whisper_online.output_transcript(o, start, now=end)
             logger.debug(f"## last processed {end:.2f}s")
             processing_times[audio_path]['segment_duration'].append(end-beg)
             processing_times[audio_path]['segment_timestamps'].append((beg,end))
             processing_times[audio_path]['segment_processing_time'].append(end_time-start_time)
-            if BENCHMARK_MODE:
+            if MODE:
                 pbar.n = round(end,3)
                 pbar.refresh()
             if end >= duration:
@@ -181,13 +195,10 @@ def process_file(audio_path, args, online, processing_times):
         processing_times[audio_path]['segment_buffer_latency'] = []
         end = 0
         
-        la3 = []
-        lu3 = []
-        lu2 = []
         buffered_time = 0
-        # from playsound import playsound
-        # playsound(os.path.abspath(audio_path), False)
-        if BENCHMARK_MODE:
+        from playsound import playsound
+        playsound(os.path.abspath(audio_path), False)
+        if MODE=="benchmark":
             pbar = tqdm(total=round(duration,3))
         while True:
             now = time.time() - start
@@ -208,12 +219,14 @@ def process_file(audio_path, args, online, processing_times):
                 logger.info("assertion error")
                 pass
             else:
-                # whisper_online.output_transcript(committed, now=end_time-start, end="                                    \n")
-                # whisper_online.output_transcript(buffer, now=end_time-start, end="\r")
-                if not BENCHMARK_MODE:
-                    if committed[0] is not None:
-                        output_streaming(committed, out_time=end_time-start, commit=True, buffered_time=buffered_time)
-                    output_streaming(buffer, out_time=end_time-start)
+                if MODE!="benchmark":
+                    if MODE=="streaming":
+                        if committed[0] is not None: confirmed_transcription += committed[2]
+                        output_streaming(confirmed_transcription, buffer)
+                    else:
+                        if committed[0] is not None:
+                            output_timed(committed, out_time=end_time-start, commit=True, buffered_time=buffered_time)
+                        output_timed(buffer, out_time=end_time-start)
                 buffered_time = end_time-start
                 transcripts.append(committed)
             now = time.time() - start
@@ -224,19 +237,12 @@ def process_file(audio_path, args, online, processing_times):
             if buffer[0] is not None:
                 processing_times[audio_path]['segment_start_buffer_latency'].append(now - buffer[0])
                 processing_times[audio_path]['segment_buffer_latency'].append(now - buffer[1])
-            if buffer[0] is not None:
-                if now - buffer[0]>3:
-                    la3.append(now - buffer[0])
-                elif now - buffer[0]<2:
-                    lu2.append(now-buffer[0])
-                else:
-                    lu3.append(now-buffer[0])
             logger.debug(f"The latency is {now-end:.2f}s and output is '{committed[2]}'")
-            if BENCHMARK_MODE:
+            if MODE=="benchmark":
                 pbar.n = min(round(end,3), pbar.total)
                 pbar.refresh()
             beg = end
-            if end >= duration:
+            if end >= duration:# or beg>=40:
                 break
             
         now = None
@@ -251,11 +257,11 @@ def process_file(audio_path, args, online, processing_times):
     o = online.finish()
     transcripts.append(o)
     # logging.getLogger(__name__).setLevel(level=logging.INFO)
-    if not BENCHMARK_MODE:
-        output_streaming(o, out_time=end_time-start, commit=True, buffered_time=buffered_time)
-        print(f"Above 3sec: {len(la3)}")
-        print(f"Between 2 and 3sec: {len(lu3)}")
-        print(f"Below 2sec: {len(lu2)}")
+    if MODE!="benchmark" and not args.offline and not args.comp_unaware:
+        if MODE=="streaming":
+            output_streaming(confirmed_transcription, o)
+        else:
+            output_timed(o, out_time=end_time-start, commit=True, buffered_time=buffered_time)
     export_transcipt(transcripts, os.path.join(args.output_path,"transcripts",os.path.basename(audio_path).replace(".mp3",".txt").replace(".wav",".txt").replace(".flac",".txt")))
     return processing_times
 
@@ -270,7 +276,7 @@ def init_args():
     parser.add_argument('--device', type=str, default="cuda", choices=["cuda", "cpu"],help='Device used.')
     parser.add_argument('--compute_type', type=str, default="int8", choices=["int8", "float16", "float32", "int8_float16"], help='Computation type (int8, float16...).')
     parser.add_argument('--output_path', type=str, default="./", help='Output folder of the script.')
-    parser.add_argument('--method', type=str, default="beam-search", choices=["beam-search", "greedy"],help='Greedy or beam search decoding.')
+    parser.add_argument('--method', type=str, default="greedy", choices=["beam-search", "greedy"],help='Greedy or beam search decoding.')
     parser.add_argument('--verbose', default=1, help='Verbose mode (2=DEBUG, 1=INFO, 0=ERROR).')
     parser.add_argument('--cpu_threads', default=4, help='When running on CPU, number of threads to use.')
     parser.add_argument('--previous_text', action="store_true", default=False, help='Condition on previous text (default False).')

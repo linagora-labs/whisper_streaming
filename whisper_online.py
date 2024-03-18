@@ -94,7 +94,7 @@ class WhisperTimestampedASR(ASRBase):
                 initial_prompt=init_prompt, **self.transcribe_kargs)
         return result
  
-    def ts_words(self,r):
+    def ts_words(self,r, timestamps_convert_function=None):
         # return: transcribe result object to [(beg,end,"word1"), ...]
         o = []
         for s in r["segments"]:
@@ -165,13 +165,18 @@ class FasterWhisperASR(ASRBase):
         segments, info = self.model.transcribe(audio, language=self.original_language, initial_prompt=init_prompt, word_timestamps=True, **self.transcribe_kargs)
         return list(segments)
 
-    def ts_words(self, segments):
+    def ts_words(self, segments, timestamps_convert_function=None):
         o = []
         for segment in segments:
             for word in segment.words:
                 # not stripping the spaces -- should not be merged with them!
                 w = word.word
-                t = (word.start, word.end, w)
+                if timestamps_convert_function is not None:
+                    # print(f"start: {word.start}->{timestamps_convert_function(word.start)}, end: {word.end}->{timestamps_convert_function(word.end)}")
+                    start, end = timestamps_convert_function(word.start, word.end)
+                    t = (start, end, w)
+                else:
+                    t = (word.start, word.end, w)
                 o.append(t)
         return o
 
@@ -312,19 +317,31 @@ class OnlineASRProcessor:
         Returns: a tuple (beg_timestamp, end_timestamp, "text"), or (None, None, ""). 
         The non-emty text is confirmed (committed) partial transcript.
         """
-
+        vad = True
         prompt, non_prompt = self.prompt()
         logger.debug(f"PROMPT:{prompt}")
         logger.debug(f"CONTEXT:{non_prompt}")
         logger.debug(f"Transcribing {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f} seconds starting at {self.buffer_time_offset:2.2f}s")
-        res = self.asr.transcribe(self.audio_buffer, init_prompt=prompt)
-
+        # print(f"Transcribing {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f} seconds starting at {self.buffer_time_offset:2.2f}s")
+        # use VAD to filter out the silence
+        if vad:
+            from whisper_timestamped.transcribe import remove_non_speech
+            tensor_buffer = torch.tensor(self.audio_buffer)
+            audio_speech, segments, convertion_function = remove_non_speech(tensor_buffer, method="silero", sample_rate=self.SAMPLING_RATE, dilatation=0.5)
+            audio_speech = audio_speech.numpy()
+            res = self.asr.transcribe(audio_speech, init_prompt=prompt)
+        else:
+            res = self.asr.transcribe(self.audio_buffer, init_prompt=prompt)
         # transform to [(beg,end,"word1"), ...]
-        tsw = self.asr.ts_words(res)
+        tsw = self.asr.ts_words(res, convertion_function if vad else None)
+        # print(f"TSW: {tsw}")
 
         self.transcript_buffer.insert(tsw, self.buffer_time_offset)
         o, buffer = self.transcript_buffer.flush()
         self.commited.extend(o)
+        # print(f"{buffer}")
+        if buffer and (self.buffer_time_offset+len(self.audio_buffer)/self.SAMPLING_RATE)-buffer[-1][1]<0.05:
+            buffer.pop(-1)
         logger.debug(f">>>>COMPLETE NOW:{self.to_flush(o)}")
         logger.debug(f"INCOMPLETE:{self.to_flush(self.transcript_buffer.complete())}")
 
@@ -341,7 +358,7 @@ class OnlineASRProcessor:
             s = 30 # if the audio buffer is longer than 30s, trim it
         
         if len(self.audio_buffer)/self.SAMPLING_RATE > s:
-            self.chunk_completed_segment(res)
+            self.chunk_completed_segment(res, chunk_silence=vad, speech_segments=segments if vad else False)
 
             # alternative: on any word
             #l = self.buffer_time_offset + len(self.audio_buffer)/self.SAMPLING_RATE - 10
@@ -350,7 +367,7 @@ class OnlineASRProcessor:
             #while k>0 and self.commited[k][1] > l:
             #    k -= 1
             #t = self.commited[k][1] 
-            logger.debug(f"chunking segment")
+            # logger.debug(f"chunking segment")
             #self.chunk_at(t)
 
         logger.debug(f"len of buffer now: {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f}")
@@ -372,24 +389,34 @@ class OnlineASRProcessor:
         logger.debug(f"--- sentence chunked at {chunk_at:2.2f}")
         self.chunk_at(chunk_at)
 
-    def chunk_completed_segment(self, res):
-        if self.commited == []: return
+    def chunk_completed_segment(self, res, chunk_silence=False, speech_segments=None):
+        if self.commited == [] and not chunk_silence: 
+            return
 
         ends = self.asr.segments_end_ts(res)
-
         t = self.commited[-1][1]
-
         if len(ends) > 1:
-
             e = ends[-2]+self.buffer_time_offset
             while len(ends) > 2 and e > t:
                 ends.pop(-1)
                 e = ends[-2]+self.buffer_time_offset
             if e <= t:
                 logger.debug(f"--- segment chunked at {e:2.2f}")
-                self.chunk_at(e)#+self.buffer_time_offset)
+                # print(f"--- segment chunked at {e:2.2f}")
+                self.chunk_at(e)
             else:
                 logger.debug(f"--- last segment not within commited area")
+        elif chunk_silence:
+            lenght = len(self.audio_buffer)/self.SAMPLING_RATE
+            e = self.buffer_time_offset + lenght - 2
+            if speech_segments:
+                end_silence = lenght - speech_segments[-1][1]
+                if end_silence > 2:
+                    logger.debug(f"--- Silence segment chunked at {e:2.2f}")
+                    self.chunk_at(e)
+            elif speech_segments is not None:
+                logger.debug(f"--- Silence segment chunked at {e:2.2f}")
+                self.chunk_at(e)  
         else:
             logger.debug(f"--- not enough segments to chunk")
 
@@ -400,6 +427,7 @@ class OnlineASRProcessor:
     def chunk_at(self, time):
         """trims the hypothesis and audio buffer at "time"
         """
+        # print(f"chunking at {time:2.2f}")
         self.transcript_buffer.pop_commited(time)
         cut_seconds = time - self.buffer_time_offset
         self.audio_buffer = self.audio_buffer[int(cut_seconds*self.SAMPLING_RATE):]
@@ -494,7 +522,7 @@ def add_shared_args(parser):
     """shared args for simulation (this entry point) and server
     parser: argparse.ArgumentParser object
     """
-    parser.add_argument('--min-chunk-size', type=float, default=1.0, help='Minimum audio chunk size in seconds. It waits up to this time to do processing. If the processing takes shorter time, it waits, otherwise it processes the whole segment that was received by this time.')
+    parser.add_argument('--min-chunk-size', type=float, default=0.8, help='Minimum audio chunk size in seconds. It waits up to this time to do processing. If the processing takes shorter time, it waits, otherwise it processes the whole segment that was received by this time.')
     # parser.add_argument('--model', type=str, default='large-v3', choices="tiny.en,tiny,base.en,base,small.en,small,medium.en,medium,large-v1,bofenghuang/whisper-large-v3-french,large-v2,large-v3,large".split(","),help="Name size of the Whisper model to use (default: large-v3). The model is automatically downloaded from the model hub if not present in model cache dir.")
     parser.add_argument('--model', type=str, default='large-v3', help="Name size of the Whisper model to use (default: large-v3). The model is automatically downloaded from the model hub if not present in model cache dir.")
     parser.add_argument('--model_cache_dir', type=str, default=None, help="Overriding the default model cache dir where models downloaded from the hub are saved")
@@ -504,7 +532,7 @@ def add_shared_args(parser):
     parser.add_argument('--backend', type=str, default="faster-whisper", choices=["faster-whisper", "whisper_timestamped-openai", "whisper_timestamped-transformers"],help='Load only this backend for Whisper processing.')
     parser.add_argument('--vad', action='store', default=False, const=True, nargs='?', help='Use VAD = voice activity detection, with the default parameters.')
     parser.add_argument('--buffer_trimming', type=str, default="segment", choices=["sentence", "segment"],help='Buffer trimming strategy -- trim completed sentences marked with punctuation mark and detected by sentence segmenter, or the completed segments returned by Whisper. Sentence segmenter must be installed for "sentence" option.')
-    parser.add_argument('--buffer_trimming_sec', type=float, default=15, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')
+    parser.add_argument('--buffer_trimming_sec', type=float, default=8, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')
 
 
 

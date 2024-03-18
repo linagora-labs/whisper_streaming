@@ -33,20 +33,24 @@ def load_data(data_path, ground_truth_folder):
 def load_prediction(file_path, verbose=False):
     pred = ''
     with open(file_path+".txt", 'r') as f:
-        line = f.readline()
-        line = line.strip()
-        if line.startswith("(None, None, '')"):
-            if verbose:
-                print(f'Empty prediction for {file_path}')
-        elif line:
-            lines = f.readlines()
-            pred += line.split(' ', 2)[2][1:]
-            for line in lines:
-                line = line.strip()
+        try:
+            line = f.readline()
+            line = line.strip()
+            if line.startswith("(None, None, '')"):
+                if verbose:
+                    print(f'Empty prediction for {file_path}')
+            elif line:
+                lines = f.readlines()
                 pred += line.split(' ', 2)[2][1:]
-        else:
-            if verbose:
-                print(f'Empty prediction for {file_path}')
+                for line in lines:
+                    line = line.strip()
+                    pred += line.split(' ', 2)[2][1:]
+            else:
+                if verbose:
+                    print(f'Empty prediction for {file_path}')
+        except UnicodeDecodeError as e:
+            print(f"Error reading {file_path}.txt")
+        
     return pred
 
 def load_truth(file_path, verbose=False):
